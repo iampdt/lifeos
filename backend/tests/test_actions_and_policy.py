@@ -6,11 +6,13 @@ from pydantic import ValidationError
 
 from app.execution.actions import (
     ActionKind,
+    ClosePeriod,
     CreatePeriod,
     CreateTask,
     MarkDone,
     SetDue,
     SetStatus,
+    UpdateBookProgress,
     UpsertHabitDay,
     WritePlan,
     build_plan,
@@ -109,3 +111,22 @@ def test_allowlist_refuses_fields_outside_it():
         check_plan(WritePlan("goals", "g", {"status": "Done"}))
     with pytest.raises(PermissionDenied):
         check_plan(WritePlan("feedback", "f", {"title": "x"}))
+
+
+def test_close_period_writes_review_and_closed_status():
+    plan = build_plan(ActionKind.WEEK_CLOSE, ClosePeriod(page_id="w", review="Good week"), SPECS)
+    assert plan == WritePlan("weeks", "w", {"review": "Good week", "status": "Closed"})
+    check_plan(plan)
+    month = build_plan(ActionKind.MONTH_CLOSE, ClosePeriod(page_id="m", review="x"), SPECS)
+    assert month.data_source == "months"
+
+
+def test_book_progress_plan_and_validation():
+    payload = UpdateBookProgress(page_id="b", pages_read=120, status="reading")
+    plan = build_plan(ActionKind.BOOK_UPDATE_PROGRESS, payload, SPECS)
+    assert plan.values == {"status": "Reading", "pages_read": 120}
+    check_plan(plan)
+    with pytest.raises(ValidationError):
+        UpdateBookProgress(page_id="b")
+    with pytest.raises(ValidationError):
+        UpdateBookProgress(page_id="b", pages_read=-1)

@@ -25,6 +25,7 @@ from app.execution.actions import (
     PAYLOADS,
     ActionKind,
     Payload,
+    SetDue,
     dependencies,
     importance,
     parse_payload,
@@ -32,7 +33,7 @@ from app.execution.actions import (
 )
 from app.execution.audit import audit
 from app.permissions.policy import DEFAULT_MODES, Mode
-from app.services.calendar import DEFAULT_TZ
+from app.services.calendar import DEFAULT_TZ, month_range, week_range
 
 
 class ProposalError(Exception):
@@ -58,6 +59,19 @@ def idempotency_key(kind: ActionKind | str, payload: Payload, period: date) -> s
         separators=(",", ":"),
     )
     return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _check_same_periods(original: SetDue, edited: SetDue) -> None:
+    """R7: the Week and Month links were resolved for the proposed date. An edited date must
+    stay in the same week and month, or the links would point at the wrong pages."""
+    if edited.new_due == original.new_due:
+        return
+    same_week = week_range(edited.new_due) == week_range(original.new_due)
+    same_month = month_range(edited.new_due) == month_range(original.new_due)
+    if not (same_week and same_month):
+        raise ProposalError(
+            "an edited Due date must stay in the same week and month; reject and re-plan instead"
+        )
 
 
 class ProposalService:
@@ -173,6 +187,8 @@ class ProposalService:
                 raise ProposalError(f"edits are invalid: {exc}") from exc
             if target_page_id(edited) != proposal.target_page_id:
                 raise ProposalError("edits can't change which page the action targets")
+            if isinstance(edited, SetDue):
+                _check_same_periods(SetDue.model_validate(proposal.payload), edited)
             proposal.edited_payload = edited.model_dump(mode="json")
         proposal.status = "approved"
         proposal.decided_at = self.clock()
@@ -211,9 +227,14 @@ class ProposalService:
         return proposal
 
     async def expire_due(self) -> int:
+        """Pending proposals past their TTL expire, and so do approvals that were never
+        executed (for example because writes were disabled at the time)."""
         result = await self.session.execute(
             update(ActionProposal)
-            .where(ActionProposal.status == "pending", ActionProposal.expires_at <= self.clock())
+            .where(
+                ActionProposal.status.in_(("pending", "approved")),
+                ActionProposal.expires_at <= self.clock(),
+            )
             .values(status="expired")
             .returning(ActionProposal.id)
         )

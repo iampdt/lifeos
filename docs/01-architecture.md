@@ -396,7 +396,7 @@ CREATE TABLE knowledge_chunks (id bigserial PRIMARY KEY, page_id text NOT NULL, 
 | GET | `/tasks?view=active\|today\|overdue\|inbox\|next7\|done&from=&to=` | Read-through to Notion |
 | GET | `/goals?status=active`, `/habits?from=&to=`, `/reading/queue` | Read-through |
 | POST | `/workflows/{name}/runs` | Start `morning_briefing`, `evening_checkin`, `weekly_review`, `monthly_career_review` → `{run_id}` |
-| GET | `/runs/{id}`; POST `/runs/{id}/messages` | Run state and outputs; send a reply (e.g. the check-in answer) |
+| GET | `/runs/{id}`; POST `/runs/{id}/resume` `{answer}` | Run state and outputs; answer what the run is waiting for (check-in reply, weekly decisions, approvals) |
 | POST | `/chat` (SSE) | Chief of Staff chat; streams tokens and tool events |
 | GET | `/proposals?status=pending` | Pending approvals |
 | POST | `/proposals/{id}/approve` `{edits?}`, `/proposals/{id}/reject` `{note?}`, `/proposals/approve-batch` `{ids}` | Decide |
@@ -517,6 +517,18 @@ No test ever writes to the real Life OS databases.
 | Q6 | Habit row title format | `dd/mm/yyyy` |
 | Q7 | Update the Life OS Sunday-review text | Approved and done (20–25 min) |
 | Q8 | Carried-forward task with *no* Week/Month relation | Link it to the new week and month too (every carried task ends up linked) |
+
+Phase 4b implementation decisions (2026-11-01):
+
+| # | Topic | Decision |
+| --- | --- | --- |
+| I1 | Answering a run | One endpoint, `POST /runs/{id}/resume`, for every pause (question, decisions, approval); resuming is a compare-and-set on the run status |
+| I2 | Proposals left undecided in an approval step | Rejected, so nothing lingers half-decided |
+| I3 | An approval that isn't executed before its TTL (e.g. writes were off) | Expires; the executor refuses it rather than writing days later |
+| I4 | Editing the Due date of a `task.set_due` proposal | Allowed only within the same week and month, because the Week/Month links were resolved for the original date (R7) |
+| I5 | Models | Pinned chains in config: fast `gemini-3.5-flash-lite` → `gemini-3.1-flash-lite`; smart `gemini-3.5-flash` → `gemini-3.5-flash-lite`. The 2.5 models return 404 for new accounts |
+| I6 | Habits `Screen Time` unit | Hours, like Sleep (the column was empty). **Owner to confirm** |
+| I7 | Model output shown to the owner | Reference codes (T1, D2) are replaced by task titles before anything is displayed or written |
 
 ## 20. Flagship 2 and portfolio case study requirements
 

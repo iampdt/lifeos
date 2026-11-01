@@ -49,6 +49,16 @@ def month_range(day: date) -> tuple[date, date]:
     return start, next_month - timedelta(days=1)
 
 
+def week_title(day: date) -> str:
+    """Title for a new Weekly Progress page, in the owner's latest style: "2 Nov – 8 Nov"."""
+    start, end = week_range(day)
+    return f"{start.day} {start:%b} – {end.day} {end:%b}"
+
+
+def month_title(day: date) -> str:
+    return f"{day:%b} {day.year}"
+
+
 def format_habit_title(day: date) -> str:
     return f"{day.day:02d}/{day.month:02d}/{day.year:04d}"
 

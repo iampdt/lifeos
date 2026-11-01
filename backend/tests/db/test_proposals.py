@@ -5,7 +5,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 
 from app.db.models import ActionProposal, AuditLog
-from app.execution.actions import ActionKind, CreateTask, MarkDone, SetStatus
+from app.execution.actions import ActionKind, CreateTask, MarkDone, SetDue, SetStatus
 from app.execution.proposals import ProposalError, ProposalService, utcnow
 from app.permissions.policy import DEFAULT_MODES, Mode
 
@@ -115,3 +115,31 @@ async def test_audit_log_rejects_updates_and_deletes(session_factory):
         async with session_factory() as session:
             with pytest.raises(DBAPIError, match="append-only"):
                 await session.execute(text(statement))
+
+
+async def test_due_edits_must_stay_in_the_same_week_and_month(session_factory):
+    move = SetDue(
+        page_id="task-1", new_due=date(2026, 11, 3), decision="carry_forward",
+        week_page_id="week-45", month_page_id="nov",
+    )  # fmt: skip
+    proposal, _ = await propose(session_factory, move, ActionKind.TASK_SET_DUE)
+    async with session_factory() as session, session.begin():
+        service = ProposalService(session)
+        with pytest.raises(ProposalError, match="same week and month"):
+            await service.approve(proposal.id, edits={"new_due": "2026-11-10"})
+    async with session_factory() as session, session.begin():
+        approved = await ProposalService(session).approve(
+            proposal.id, edits={"new_due": "2026-11-06"}
+        )
+        assert approved.edited_payload["new_due"] == "2026-11-06"
+
+
+async def test_expire_due_also_expires_unexecuted_approvals(session_factory):
+    proposal, _ = await propose(session_factory)
+    async with session_factory() as session, session.begin():
+        await ProposalService(session).approve(proposal.id)
+    async with session_factory() as session, session.begin():
+        later = ProposalService(session, clock=lambda: utcnow() + timedelta(days=2))
+        assert await later.expire_due() == 1
+    async with session_factory() as session:
+        assert (await session.get(ActionProposal, proposal.id)).status == "expired"

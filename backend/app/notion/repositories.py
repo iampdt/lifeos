@@ -123,6 +123,9 @@ class TaskRepository(Repository):
     async def done_due_between(self, start: date, end: date) -> list[Task]:
         return await self.query(self.views.done_due_between(start, end))
 
+    async def due_between(self, start: date, end: date) -> list[Task]:
+        return await self.query(self.views.due_between(start, end))
+
     async def all(self) -> list[Task]:
         return await self.query(QuerySpec())
 
@@ -218,6 +221,21 @@ class PeriodRepository(Repository):
         prop = self.spec.prop("start")
         query = QuerySpec({"property": prop.name, "date": {"equals": start.isoformat()}})
         return [await self.to_domain(page) for page in await self._pages(query)]
+
+    async def covering(self, day: date) -> list[PeriodPage]:
+        """Pages whose Start–End range contains `day`, latest start first. Older pages don't
+        always run Monday–Sunday, so this finds them where `starting_on` wouldn't."""
+        start, end = self.spec.prop("start"), self.spec.prop("end")
+        query = QuerySpec(
+            {
+                "and": [
+                    {"property": start.name, "date": {"on_or_before": day.isoformat()}},
+                    {"property": end.name, "date": {"on_or_after": day.isoformat()}},
+                ]
+            }
+        )
+        pages = [await self.to_domain(page) for page in await self._pages(query)]
+        return sorted(pages, key=lambda p: p.start or date.min, reverse=True)
 
 
 class BookRepository(Repository):

@@ -28,7 +28,10 @@ class ActionKind(StrEnum):
     TASK_CREATE = "task.create"
     HABIT_UPSERT_DAY = "habit.upsert_day"
     WEEK_CREATE = "week.create"
+    WEEK_CLOSE = "week.close"
     MONTH_CREATE = "month.create"
+    MONTH_CLOSE = "month.close"
+    BOOK_UPDATE_PROGRESS = "book.update_progress"
 
 
 class Payload(BaseModel):
@@ -114,6 +117,27 @@ class CreatePeriod(Payload):
         return self
 
 
+class ClosePeriod(Payload):
+    """Write the review text and mark a Weekly/Monthly Progress page Closed."""
+
+    page_id: str
+    review: str = Field(min_length=1, max_length=6000)
+
+
+class UpdateBookProgress(Payload):
+    page_id: str
+    status: Literal["reading", "finished"] | None = None
+    pages_read: float | None = Field(default=None, ge=0, le=100_000)
+    started: date | None = None
+    finished: date | None = None
+
+    @model_validator(mode="after")
+    def _something(self) -> UpdateBookProgress:
+        if all(getattr(self, f) is None for f in ("status", "pages_read", "started", "finished")):
+            raise ValueError("nothing to update")
+        return self
+
+
 PAYLOADS: dict[ActionKind, type[Payload]] = {
     ActionKind.TASK_MARK_DONE: MarkDone,
     ActionKind.TASK_SET_DUE: SetDue,
@@ -121,7 +145,10 @@ PAYLOADS: dict[ActionKind, type[Payload]] = {
     ActionKind.TASK_CREATE: CreateTask,
     ActionKind.HABIT_UPSERT_DAY: UpsertHabitDay,
     ActionKind.WEEK_CREATE: CreatePeriod,
+    ActionKind.WEEK_CLOSE: ClosePeriod,
     ActionKind.MONTH_CREATE: CreatePeriod,
+    ActionKind.MONTH_CLOSE: ClosePeriod,
+    ActionKind.BOOK_UPDATE_PROGRESS: UpdateBookProgress,
 }
 
 DATA_SOURCE: dict[ActionKind, str] = {
@@ -131,7 +158,10 @@ DATA_SOURCE: dict[ActionKind, str] = {
     ActionKind.TASK_CREATE: "tasks",
     ActionKind.HABIT_UPSERT_DAY: "habits",
     ActionKind.WEEK_CREATE: "weeks",
+    ActionKind.WEEK_CLOSE: "weeks",
     ActionKind.MONTH_CREATE: "months",
+    ActionKind.MONTH_CLOSE: "months",
+    ActionKind.BOOK_UPDATE_PROGRESS: "books",
 }
 
 
@@ -231,6 +261,17 @@ def build_plan(
                 "status": option("status", payload.status),
             }
             return WritePlan(source, None, values, Lookup("period_start", day=payload.start))
+        case ClosePeriod():
+            values = {"review": payload.review, "status": option("status", "closed")}
+            return WritePlan(source, payload.page_id, values)
+        case UpdateBookProgress():
+            values = {}
+            if payload.status:
+                values["status"] = option("status", payload.status)
+            for name in ("pages_read", "started", "finished"):
+                if getattr(payload, name) is not None:
+                    values[name] = getattr(payload, name)
+            return WritePlan(source, payload.page_id, values)
     raise ValueError(f"no plan for {kind}")  # pragma: no cover
 
 

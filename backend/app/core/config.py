@@ -32,6 +32,27 @@ class Settings(BaseSettings):
     # Global kill switch: no Notion write happens unless this is explicitly true (design §9.3).
     lifeos_writes_enabled: bool = False
 
+    gemini_api_key: SecretStr | None = None
+    # Pinned versions, tried in order. "fast" parses and plans; "smart" writes reviews.
+    # Chosen 2026-11-01 from measured calls (docs/progress/phase-4b.md).
+    llm_fast_models: str = "gemini-3.5-flash-lite,gemini-3.1-flash-lite"
+    llm_smart_models: str = "gemini-3.5-flash,gemini-3.5-flash-lite"
+    llm_timeout_seconds: float = 30.0
+    llm_daily_token_budget: int = 300_000
+
+    # Bearer token for the API until session auth arrives with the frontend (Phase 6).
+    # Unset means every API route refuses requests (fail closed).
+    lifeos_api_token: SecretStr | None = None
+
+    def model_chain(self, tier: str) -> list[str]:
+        raw = self.llm_smart_models if tier == "smart" else self.llm_fast_models
+        return [name.strip() for name in raw.split(",") if name.strip()]
+
+    @property
+    def checkpoint_url(self) -> str:
+        # LangGraph's Postgres checkpointer uses psycopg, not SQLAlchemy's asyncpg URL form.
+        return self.database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+
 
 @lru_cache
 def get_settings() -> Settings:

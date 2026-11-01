@@ -110,3 +110,10 @@ class TaskQueries:
             ),
             [{"property": self.due.name, "direction": "descending"}],
         )
+
+    def due_between(self, start: date, end: date) -> QuerySpec:
+        """Every task with Due in the range, whatever its status (weekly metrics, R5)."""
+        return QuerySpec(
+            _all(_date(self.due, "on_or_after", start), _date(self.due, "on_or_before", end)),
+            [{"property": self.due.name, "direction": "ascending"}],
+        )

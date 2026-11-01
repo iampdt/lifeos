@@ -6,9 +6,10 @@ Notion stays the source of truth. LifeOS reads it, prepares briefings and review
 proposes changes. Nothing is written back to Notion until the owner approves it, and every
 write is verified and logged.
 
-**Status:** Phase 4a done (2026-11-01): approval and execution pipeline, with real writes verified on a
-sandbox copy of the workspace. Phase 4b (LLM workflows and API) is next. LifeOS is the second flagship
-portfolio project.
+**Status:** Phase 4 done (2026-11-01). The evening check-in, morning briefing and weekly review
+run as LangGraph workflows on Gemini, with rule-based fallbacks, owner approval before every write,
+and a token-protected FastAPI. Verified with dry runs on the real workspace (writes off) and a full
+approved loop on a sandbox copy. LifeOS is the second flagship portfolio project.
 
 ## Documents
 
@@ -18,6 +19,7 @@ portfolio project.
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Phases, exit criteria and estimates |
 | [docs/progress/phase-3.md](docs/progress/phase-3.md) | Phase 3 results: what was built and how it was verified against the live workspace |
 | [docs/progress/phase-4a.md](docs/progress/phase-4a.md) | Phase 4a results: proposals, approvals, executor, audit log, sandbox writes |
+| [docs/progress/phase-4b.md](docs/progress/phase-4b.md) | Phase 4b results: LLM layer, workflows, API, live dry runs |
 | `docs/private/` | Workspace discovery report (personal data; git-ignored) |
 
 ## Planned stack
@@ -35,6 +37,17 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m pytest                              # unit tests, no network
 LIFEOS_LIVE_TESTS=1 .venv/bin/python -m pytest tests/live  # live: reads Life OS, writes only to the sandbox
 .venv/bin/python -m scripts.notion_check --profile live   # or --profile sandbox
+
+# Run a workflow from the terminal; it stops whenever it needs an answer you didn't give
+.venv/bin/python -m scripts.run_workflow evening_checkin --answer "Finished X, did DSA, slept 7h"
+.venv/bin/python -m scripts.run_workflow --resume RUN_ID --answer '{"approve": "all"}'
+.venv/bin/python -m scripts.run_workflow evening_checkin --profile sandbox --writes ...  # sandbox writes
+
+# API (needs LIFEOS_API_TOKEN in .env)
+.venv/bin/uvicorn app.api.main:app --port 8000
 ```
+
+Notion is only written when `LIFEOS_WRITES_ENABLED=true` (the sandbox profile can also use
+`--writes`). Every write still needs approval.
 
 Configuration comes from the repo-root `.env` (see `.env.example`).

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -78,6 +78,7 @@ class Executor:
         writes_enabled: bool,
         tz: ZoneInfo = DEFAULT_TZ,
         actor: str = "system",
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self.session_factory = session_factory
         self.client = client
@@ -85,6 +86,7 @@ class Executor:
         self.writes_enabled = writes_enabled
         self.tz = tz
         self.actor = actor
+        self.clock = clock
 
     # --- batch ---------------------------------------------------------------------------
 
@@ -142,6 +144,14 @@ class Executor:
             if proposal is None or proposal.status != "approved":
                 status = proposal.status if proposal else "missing"
                 return ExecutionResult(proposal_id, "skipped", detail=f"proposal is {status}")
+            if proposal.expires_at <= self.clock():
+                # An approval left unexecuted (e.g. while writes were disabled) must not fire
+                # days later against pages that may have moved on.
+                proposal.status = "expired"
+                audit(session, actor=self.actor, event="proposal.expired",
+                      entity_type="proposal", entity_id=str(proposal_id),
+                      details={"reason": "approved but not executed before expiry"})  # fmt: skip
+                return ExecutionResult(proposal_id, "skipped", detail="approval expired")
             resolved, blocker = await self._resolve_dependencies(session, proposal)
             if blocker == "waiting":
                 return ExecutionResult(
