@@ -55,7 +55,7 @@ LIFEOS_LIVE_TESTS=1 .venv/bin/python -m pytest -m live   # reads the real worksp
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 
 cd ../frontend
-npm run lint && npx tsc --noEmit && npm run build
+npm run lint && npm run typecheck && npm run build
 ```
 
 Database tests use the `lifeos_test` database: the schema is rebuilt from the migrations once per

@@ -6,7 +6,7 @@ TanStack Query. All data comes from the FastAPI backend in `../backend`.
 ```bash
 npm install
 npm run dev            # http://localhost:3000, proxies /api/* to the backend
-npm run lint && npm run build
+npm run lint && npm run typecheck && npm run build
 ```
 
 `LIFEOS_BACKEND_URL` (default `http://127.0.0.1:8000`) sets where `/api/*` is proxied. The
