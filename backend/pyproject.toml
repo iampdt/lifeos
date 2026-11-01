@@ -1,0 +1,22 @@
+[project]
+name = "lifeos-backend"
+version = "0.1.0"
+description = "LifeOS backend: Notion integration, workflows and approvals"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = ["live: real Notion API calls; read-only on Life OS, writes only to the sandbox (LIFEOS_LIVE_TESTS=1)"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC"]
+
+[tool.ruff.lint.isort]
+# The local `alembic/` migrations folder would otherwise make ruff treat the library as first-party.
+known-third-party = ["alembic"]

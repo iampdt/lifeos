@@ -1,0 +1,103 @@
+# Logical names → Notion data sources and exact property names.
+# IDs live in the environment (NOTION_DS_*, or NOTION_SANDBOX_DS_* for the sandbox profile).
+# `values` maps semantic names used in code to Notion option names; drift detection checks
+# that every listed option still exists.
+
+data_sources:
+  tasks:
+    env: NOTION_DS_TASKS
+    database_env: NOTION_DB_TASKS
+    properties:
+      title: {name: Task, type: title}
+      status:
+        name: Status
+        type: select
+        values: {inbox: Inbox, next: Next, doing: Doing, waiting: Waiting, done: Done, cancelled: Cancelled}
+      priority: {name: Priority, type: select, values: {p0: P0, p1: P1, p2: P2, p3: P3}}
+      due: {name: Due, type: date}
+      completed: {name: Completed, type: date}
+      area: {name: Area, type: select}
+      estimated_time: {name: Estimated Time, type: select}
+      energy: {name: Energy, type: select}
+      recurring: {name: Recurring, type: checkbox}
+      created: {name: Created, type: created_time}
+      goal: {name: Goal, type: relation}
+      career_evidence: {name: Career Evidence, type: relation}
+      week: {name: Week, type: relation}
+      month: {name: Month, type: relation}
+      week_key: {name: Week Key, type: formula}
+      month_key: {name: Month Key, type: formula}
+
+  goals:
+    env: NOTION_DS_GOALS
+    database_env: NOTION_DB_GOALS
+    properties:
+      title: {name: Goal, type: title}
+      type: {name: Type, type: select, values: {vision: Vision, year: Year, quarter: Quarter, month: Month, week: Week}}
+      status: {name: Status, type: select, values: {planned: Planned, active: Active, done: Done, dropped: Dropped}}
+      area: {name: Area, type: select}
+      priority: {name: Priority, type: select}
+      current: {name: Current, type: number}
+      target: {name: Target, type: number}
+      success_metric: {name: Success Metric, type: rich_text}
+      start: {name: Start, type: date}
+      deadline: {name: Deadline, type: date}
+      review_notes: {name: Review Notes, type: rich_text}
+
+  habits:
+    env: NOTION_DS_HABITS
+    database_env: NOTION_DB_HABITS
+    properties:
+      title: {name: Date, type: title}
+      woke_on_time: {name: Woke On Time, type: checkbox}
+      dsa: {name: DSA, type: checkbox}
+      deep_work: {name: Deep Work, type: checkbox}
+      technical_learning: {name: Technical Learning, type: checkbox}
+      workout: {name: Workout, type: checkbox}
+      protein_target: {name: Protein Target, type: checkbox}
+      reading: {name: Reading, type: checkbox}
+      speech_practice: {name: Speech Practice, type: checkbox}
+      daily_highlight: {name: Daily Highlight, type: checkbox}
+      sleep: {name: Sleep, type: number}
+      screen_time: {name: Screen Time, type: number}
+      notes: {name: Notes, type: rich_text}
+
+  weeks:
+    env: NOTION_DS_WEEKS
+    database_env: NOTION_DB_WEEKS
+    properties:
+      title: {name: Week, type: title}
+      start: {name: Start, type: date}
+      end: {name: End, type: date}
+      status: {name: Status, type: select, values: {upcoming: Upcoming, current: Current, closed: Closed}}
+      theme: {name: Theme, type: rich_text}
+      review: {name: Review, type: rich_text}
+      tasks: {name: Tasks, type: relation}
+
+  months:
+    env: NOTION_DS_MONTHS
+    database_env: NOTION_DB_MONTHS
+    properties:
+      title: {name: Month, type: title}
+      start: {name: Start, type: date}
+      end: {name: End, type: date}
+      status: {name: Status, type: select, values: {upcoming: Upcoming, current: Current, closed: Closed}}
+      theme: {name: Theme, type: rich_text}
+      review: {name: Review, type: rich_text}
+      tasks: {name: Tasks, type: relation}
+
+  books:
+    env: NOTION_DS_BOOKS
+    database_env: NOTION_DB_BOOKS
+    properties:
+      title: {name: Book, type: title}
+      author: {name: Author, type: rich_text}
+      status: {name: Status, type: select, values: {want: Want to Read, reading: Reading, finished: Finished, abandoned: Abandoned}}
+      lane: {name: Lane, type: select}
+      up_next: {name: Up next, type: number}
+      area: {name: Area, type: select}
+      shelf: {name: Shelf, type: multi_select}
+      pages: {name: Pages, type: number}
+      pages_read: {name: Pages Read, type: number}
+      started: {name: Started, type: date}
+      finished: {name: Finished, type: date}
