@@ -7,9 +7,10 @@ services:
     runtime: docker
     plan: free
     region: singapore
+    # With rootDir set, the Dockerfile path and build context are relative to backend/.
     rootDir: backend
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /api/v1/health
     autoDeployTrigger: checksPass
     envVars:
