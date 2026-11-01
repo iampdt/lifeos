@@ -29,6 +29,7 @@ class _Draft:
     snapshot: dict[str, Any] | None = None
     last_edited: datetime | None = None
     creates_period: tuple[str, str] | None = None  # key of the period this draft creates
+    title: str | None = None
     move: tuple[str, date, str, PeriodTarget, PeriodTarget] | None = None  # set_due inputs
 
 
@@ -43,10 +44,16 @@ class ProposalBuilder:
         return len(self._drafts)
 
     async def add(
-        self, kind: ActionKind, payload: Payload, *, reason: str, rule_ids: tuple[str, ...] = ()
+        self,
+        kind: ActionKind,
+        payload: Payload,
+        *,
+        reason: str,
+        rule_ids: tuple[str, ...] = (),
+        title: str | None = None,
     ) -> None:
         snapshot, edited = await take_snapshot(self.deps.notion, self.deps.specs, kind, payload)
-        self._drafts.append(_Draft(kind, reason, rule_ids, payload, snapshot, edited))
+        self._drafts.append(_Draft(kind, reason, rule_ids, payload, snapshot, edited, title=title))
 
     async def ensure_period(self, target: PeriodTarget, reason: str) -> None:
         if target.create is None or target.key in self._period_keys:
@@ -63,6 +70,7 @@ class ProposalBuilder:
         *,
         reason: str,
         rule_ids: tuple[str, ...],
+        title: str | None = None,
     ) -> None:
         week = await self.resolver.resolve("week", new_due)
         month = await self.resolver.resolve("month", new_due)
@@ -76,7 +84,7 @@ class ProposalBuilder:
             _Draft(
                 ActionKind.TASK_SET_DUE, reason, tuple(sorted({*rule_ids, "R7"})),
                 snapshot=snapshot, last_edited=edited,
-                move=(page_id, new_due, decision, week, month),
+                move=(page_id, new_due, decision, week, month), title=title,
             )
         )  # fmt: skip
 
@@ -102,6 +110,7 @@ class ProposalBuilder:
                     target_last_edited_at=draft.last_edited,
                     ttl=ttl,
                     actor=actor,
+                    target_title=draft.title,
                 )
                 if draft.creates_period:
                     created[draft.creates_period] = proposal.id

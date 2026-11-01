@@ -71,6 +71,8 @@ class ActionProposal(Base):
     decision_note: Mapped[str | None] = mapped_column(Text)
     # Page created or updated by execution (lets dependent proposals use a newly created page).
     result_page_id: Mapped[str | None] = mapped_column(String(64))
+    # Title of the target (or of the page to create), so approval screens can name it.
+    target_title: Mapped[str | None] = mapped_column(String(200))
 
     @property
     def effective_payload(self) -> dict[str, Any]:
@@ -102,3 +104,26 @@ class AuditLog(Base):
     entity_type: Mapped[str | None] = mapped_column(String(32))
     entity_id: Mapped[str | None] = mapped_column(String(64))
     details: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+
+
+class User(Base):
+    """The owner. LifeOS is single-owner; the table allows a future second account."""
+
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(254), unique=True)
+    password_hash: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Session(Base):
+    __tablename__ = "sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    csrf_token: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

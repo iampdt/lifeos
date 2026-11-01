@@ -189,6 +189,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
                 MarkDone(page_id=task_id, completed_on=today),
                 reason="You said it's finished in tonight's check-in.",
                 rule_ids=("R5",),
+                title=state["titles"].get(task_id),
             )
         habit = _habit_payload(today, checkin, state.get("habit_today"))
         if habit:
@@ -203,6 +204,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
                 ActionKind.BOOK_UPDATE_PROGRESS,
                 UpdateBookProgress(page_id=book.id, pages_read=total),
                 reason=f"You read {item['pages']} pages today.",
+                title=book.title,
             )
         for title in checkin["new_tasks"]:
             await builder.add(
@@ -217,7 +219,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
                 await builder.set_due(
                     task_id, tomorrow, "reschedule",
                     reason=plan_["reasons"].get(task_id) or "Planned for tomorrow.",
-                    rule_ids=("R1",),
+                    rule_ids=("R1",), title=state["titles"].get(task_id),
                 )  # fmt: skip
         ids = await builder.commit(
             run_id=run_uuid(state), ttl=timedelta(hours=24), actor=f"agent:{NAME}"

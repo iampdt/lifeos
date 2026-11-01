@@ -6,10 +6,11 @@ Notion stays the source of truth. LifeOS reads it, prepares briefings and review
 proposes changes. Nothing is written back to Notion until the owner approves it, and every
 write is verified and logged.
 
-**Status:** Phase 4 done (2026-11-01). The evening check-in, morning briefing and weekly review
-run as LangGraph workflows on Gemini, with rule-based fallbacks, owner approval before every write,
-and a token-protected FastAPI. Verified with dry runs on the real workspace (writes off) and a full
-approved loop on a sandbox copy. LifeOS is the second flagship portfolio project.
+**Status:** Phase 6 (minimal frontend) done (2026-11-01). A Next.js web app with owner sign-in,
+a Command Center (today, evening check-in, morning briefing, chat, approvals), the weekly review
+and settings, on top of the LangGraph workflows and approval-gated Notion writes from Phase 4.
+Verified end to end in the browser against a sandbox copy of the workspace. LifeOS is the second
+flagship portfolio project.
 
 ## Documents
 
@@ -20,6 +21,8 @@ approved loop on a sandbox copy. LifeOS is the second flagship portfolio project
 | [docs/progress/phase-3.md](docs/progress/phase-3.md) | Phase 3 results: what was built and how it was verified against the live workspace |
 | [docs/progress/phase-4a.md](docs/progress/phase-4a.md) | Phase 4a results: proposals, approvals, executor, audit log, sandbox writes |
 | [docs/progress/phase-4b.md](docs/progress/phase-4b.md) | Phase 4b results: LLM layer, workflows, API, live dry runs |
+| [docs/progress/phase-6.md](docs/progress/phase-6.md) | Phase 6 results: owner login, chat, approvals API and the web app |
+| [frontend/README.md](frontend/README.md) | Web app: pages and how to run it |
 | `docs/private/` | Workspace discovery report (personal data; git-ignored) |
 
 ## Planned stack
@@ -43,8 +46,12 @@ LIFEOS_LIVE_TESTS=1 .venv/bin/python -m pytest tests/live  # live: reads Life OS
 .venv/bin/python -m scripts.run_workflow --resume RUN_ID --answer '{"approve": "all"}'
 .venv/bin/python -m scripts.run_workflow evening_checkin --profile sandbox --writes ...  # sandbox writes
 
-# API (needs LIFEOS_API_TOKEN in .env)
-.venv/bin/uvicorn app.api.main:app --port 8000
+# Owner account (prompts for the password; never pass it as an argument)
+.venv/bin/python -m scripts.create_owner you@example.com
+
+# API, then the web app in another terminal
+.venv/bin/uvicorn app.api.main:app --port 8000      # LIFEOS_COOKIE_SECURE=false for local http
+cd ../frontend && npm install && npm run dev         # http://localhost:3000
 ```
 
 Notion is only written when `LIFEOS_WRITES_ENABLED=true` (the sandbox profile can also use

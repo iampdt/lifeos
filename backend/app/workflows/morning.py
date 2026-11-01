@@ -112,14 +112,14 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
                     task_id, date.fromisoformat(day), "reschedule",
                     reason=f"Today has {count} major tasks and the limit is 3; this is the "
                     "first day with a free slot.",
-                    rule_ids=("R1",),
+                    rule_ids=("R1",), title=state["titles"].get(task_id),
                 )  # fmt: skip
         elif plan_["mode"] == "fill":
             for task_id in plan_["pick_ids"]:
                 await builder.set_due(
                     task_id, today, "reschedule",
                     reason=plan_["reasons"].get(task_id) or "Planned for today.",
-                    rule_ids=("R1",),
+                    rule_ids=("R1",), title=state["titles"].get(task_id),
                 )  # fmt: skip
         ids = await builder.commit(
             run_id=run_uuid(state), ttl=timedelta(hours=24), actor=f"agent:{NAME}"

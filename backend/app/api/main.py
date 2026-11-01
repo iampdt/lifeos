@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Request
@@ -19,6 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.errors import ApiError, error_body
 from app.api.routes import router
+from app.auth.sessions import RateLimiter
 from app.core.config import Settings, env_values, get_settings
 from app.db.session import make_engine, make_session_factory
 from app.llm.factory import build_router
@@ -35,6 +36,8 @@ class Services:
     settings: Settings
     deps: WorkflowDeps
     runner: WorkflowRunner
+    # §14: at most 5 sign-in attempts a minute (one process, one owner).
+    login_limiter: RateLimiter = field(default_factory=lambda: RateLimiter(5, 60))
 
 
 async def build_services(settings: Settings, stack: AsyncExitStack) -> Services:

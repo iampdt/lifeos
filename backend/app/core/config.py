@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     # Bearer token for the API until session auth arrives with the frontend (Phase 6).
     # Unset means every API route refuses requests (fail closed).
     lifeos_api_token: SecretStr | None = None
+    # Owner login (Phase 6). Secure cookies need HTTPS; set false only for local http dev.
+    lifeos_cookie_secure: bool = True
+    lifeos_session_days: int = 14
 
     def model_chain(self, tier: str) -> list[str]:
         raw = self.llm_smart_models if tier == "smart" else self.llm_fast_models

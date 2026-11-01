@@ -530,6 +530,19 @@ Phase 4b implementation decisions (2026-11-01):
 | I6 | Habits `Screen Time` unit | Hours, like Sleep (the column was empty). **Owner to confirm** |
 | I7 | Model output shown to the owner | Reference codes (T1, D2) are replaced by task titles before anything is displayed or written |
 
+Phase 6 implementation decisions (2026-11-01):
+
+| # | Topic | Decision |
+| --- | --- | --- |
+| I8 | Sessions | Server-side `sessions` table storing only a SHA-256 of the cookie token, plus a per-session CSRF token sent as `X-CSRF-Token` on every non-GET request. Logout and password reset revoke sessions. Bearer token kept for scripts and cron |
+| I9 | Login rate limit | 5 attempts a minute, in memory (one process, one owner) |
+| I10 | Chat | A loop of structured steps (one tool call or the answer per step) on the same router as the workflows, instead of provider-native function calling: same fallback chain, budget, mock and validation. Propose tools enforce R1 and only create pending proposals |
+| I11 | Where proposals are decided | Proposals of a run waiting for approval are decided through `/runs/{id}/resume` (409 elsewhere); standalone ones (chat) through `/proposals/{id}/approve|reject`. `GET /approvals` lists both |
+| I12 | SSE through the Next.js proxy | Verified: `next start` gzips and buffers the stream unless the response sets `Cache-Control: no-transform`, which the chat endpoint now does; events then arrive as they happen |
+| I13 | Page gating | Pages render at once with their own loading states (so every route has a static shell); a signed-out visitor is redirected to `/login`. Authorization stays in the backend on every call |
+| I14 | Proposal titles | `action_proposals.target_title` stores the task or page name, so approval screens can name it without workflow state |
+| I15 | "Today" in the UI | Comes from the backend (`/settings`), in the owner's timezone, never from the browser clock |
+
 ## 20. Flagship 2 and portfolio case study requirements
 
 Because LifeOS replaces the original Flagship 2 plan, it must also meet that plan's quality bar.

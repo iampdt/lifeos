@@ -101,6 +101,7 @@ class ProposalService:
         target_last_edited_at: datetime | None = None,
         ttl: timedelta = timedelta(hours=24),
         actor: str = "system",
+        target_title: str | None = None,
     ) -> tuple[ActionProposal, bool]:
         """Create a pending proposal. Returns (proposal, created); created is False when an
         identical proposal already exists for today."""
@@ -131,6 +132,7 @@ class ProposalService:
                 idempotency_key=key,
                 target_last_edited_at=target_last_edited_at,
                 expires_at=now + ttl,
+                target_title=(target_title or getattr(payload, "title", None) or "")[:200] or None,
             )
             .on_conflict_do_nothing(index_elements=["idempotency_key"])
             .returning(ActionProposal.id)

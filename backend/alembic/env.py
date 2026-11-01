@@ -18,18 +18,30 @@ if config.config_file_name is not None and config.attributes.get("configure_logg
 target_metadata = Base.metadata
 
 
+def include_name(name, type_, parent_names) -> bool:
+    # LangGraph's Postgres checkpointer creates and migrates its own `checkpoint*` tables.
+    return not (type_ == "table" and name and name.startswith("checkpoint"))
+
+
 def database_url() -> str:
     return config.get_main_option("sqlalchemy.url") or get_settings().database_url
 
 
 def run_migrations_offline() -> None:
-    context.configure(url=database_url(), target_metadata=target_metadata, literal_binds=True)
+    context.configure(
+        url=database_url(),
+        target_metadata=target_metadata,
+        literal_binds=True,
+        include_name=include_name,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
 
 def _run_sync(connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection, target_metadata=target_metadata, include_name=include_name
+    )
     with context.begin_transaction():
         context.run_migrations()
 

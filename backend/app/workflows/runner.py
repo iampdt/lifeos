@@ -15,7 +15,7 @@ from typing import Any
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.types import Command
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from app.db.models import AgentRun
 from app.workflows import evening, morning, weekly
@@ -52,6 +52,9 @@ class RunView:
     summary: dict[str, Any] | None
     error: dict[str, Any] | None
     usage: dict[str, Any]
+    trigger: str = "manual"
+    started_at: str | None = None
+    finished_at: str | None = None
 
     @classmethod
     def from_row(cls, row: AgentRun) -> RunView:
@@ -71,6 +74,9 @@ class RunView:
                 "llm_latency_ms": row.llm_latency_ms,
                 "llm_calls": output.get("llm_calls", 0),
             },
+            trigger=row.trigger,
+            started_at=row.started_at.isoformat() if row.started_at else None,
+            finished_at=row.finished_at.isoformat() if row.finished_at else None,
         )
 
 
@@ -107,6 +113,13 @@ class WorkflowRunner:
         if workflow is None:
             raise RunStateError("run not found or not waiting for an answer")
         return await self._advance(run_id, workflow, Command(resume=answer))
+
+    async def recent(self, *, limit: int = 20, status: str | None = None) -> list[RunView]:
+        async with self.deps.session_factory() as session:
+            query = select(AgentRun).order_by(AgentRun.started_at.desc()).limit(limit)
+            if status:
+                query = query.where(AgentRun.status == status)
+            return [RunView.from_row(row) for row in await session.scalars(query)]
 
     async def get(self, run_id: uuid.UUID) -> RunView:
         async with self.deps.session_factory() as session:

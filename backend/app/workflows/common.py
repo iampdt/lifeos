@@ -49,6 +49,8 @@ def run_uuid(state: BaseState) -> uuid.UUID | None:
 
 def _card_title(row: ActionProposal, titles: dict[str, str]) -> str:
     payload = row.effective_payload
+    if row.target_title:
+        return row.target_title
     if row.target_page_id and row.target_page_id in titles:
         return titles[row.target_page_id]
     if "title" in payload:

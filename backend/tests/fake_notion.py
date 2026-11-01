@@ -70,6 +70,7 @@ class FakeNotion:
         self.fail_after_create = False  # simulate a timeout after Notion created the page
         self.ignore_on_write: set[str] = set()  # property names silently dropped → mismatch
         self._clock = datetime(2026, 11, 1, 12, 0, tzinfo=UTC)
+        self.schemas: dict[str, dict[str, Any]] = {}  # data-source id → schema object
 
     def _tick(self) -> str:
         self._clock += timedelta(seconds=1)
@@ -140,3 +141,11 @@ class FakeNotion:
 
     async def get_relation_ids(self, page_id: str, property_id: str) -> list[str]:
         raise AssertionError("fake pages never truncate relations")
+
+    async def get_self(self) -> dict[str, Any]:
+        return {"object": "user", "name": "LifeOs", "bot": {"workspace_name": "Test workspace"}}
+
+    async def get_data_source(self, data_source_id: str) -> dict[str, Any]:
+        if data_source_id not in self.schemas:
+            raise NotionNotShared("not shared", status=404, code="object_not_found")
+        return copy.deepcopy(self.schemas[data_source_id])

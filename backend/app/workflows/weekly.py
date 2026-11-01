@@ -192,6 +192,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
                     SetStatus(page_id=task_id, status="cancelled"),
                     reason="Your weekly-review decision: cancel.",
                     rule_ids=("R6",),
+                    title=state["titles"].get(task_id),
                 )
             elif decision in ("carry_forward", "reschedule"):
                 if not choice.get("due"):
@@ -201,7 +202,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
                 await builder.set_due(
                     task_id, date.fromisoformat(choice["due"]), decision,
                     reason=f"Your weekly-review decision: {decision.replace('_', ' ')}.",
-                    rule_ids=("R1", "R6"),
+                    rule_ids=("R1", "R6"), title=state["titles"].get(task_id),
                 )  # fmt: skip
         for task_id, choice in choices["inbox"].items():
             if choice["action"] == "keep":
@@ -212,11 +213,13 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
                 SetStatus(page_id=task_id, status=status),
                 reason=f"Inbox triage: {choice['action']}.",
                 rule_ids=("R11",),
+                title=state["titles"].get(task_id),
             )
             if status == "next" and choice.get("due"):
                 await builder.set_due(
                     task_id, date.fromisoformat(choice["due"]), "reschedule",
                     reason="Inbox triage: planned.", rule_ids=("R11",),
+                    title=state["titles"].get(task_id),
                 )  # fmt: skip
         page = state.get("week_page")
         if page:
@@ -235,6 +238,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
                 ClosePeriod(page_id=page["id"], review=text[:6000]),
                 reason="Close the week with its review.",
                 rule_ids=("R9",),
+                title=state["week"]["label"],
             )
         else:
             warnings.append("This week has no Weekly Progress page, so there is nothing to close.")
