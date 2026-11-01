@@ -1,4 +1,4 @@
-"""Execute approved proposals against Notion (design §6.4, §9).
+"""Execute approved proposals against Notion (architecture §3.4, §6).
 
 For each approved proposal, in dependency order:
   1. kill switch and allowlist checks

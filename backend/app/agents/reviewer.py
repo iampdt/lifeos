@@ -1,4 +1,4 @@
-"""Weekly review specialist (design §8.3, MVP).
+"""Weekly review specialist (architecture §5.3, MVP).
 
 Code pre-computes every number (R5 metrics, habit counts, the overdue queue). The model writes
 the narrative and recommends, for each overdue task, carry forward or cancel. The owner makes

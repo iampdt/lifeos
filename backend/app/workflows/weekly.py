@@ -1,4 +1,4 @@
-"""Sunday weekly review, MVP (design §8.3).
+"""Sunday weekly review, MVP (architecture §5.3).
 
 load → draft (AI narrative + advice) → ⏸ decide (overdue queue and Inbox) → propose
 → ⏸ approve → execute → summarize

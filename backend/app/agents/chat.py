@@ -1,4 +1,4 @@
-"""Chat with the Chief of Staff (design §8.5).
+"""Chat with the Chief of Staff (architecture §5.4).
 
 A loop of structured steps on the same router as the workflows: each model call returns one
 tool call or the final answer. Read tools return Notion data, wrapped as untrusted. Propose tools

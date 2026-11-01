@@ -1,14 +1,15 @@
-"""Postgres tables for state LifeOS owns. Productivity records stay in Notion (design D1)."""
+"""Postgres tables for state LifeOS owns. Productivity records stay in Notion (decision D1)."""
 
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import (
     ARRAY,
     BigInteger,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -127,3 +128,15 @@ class Session(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CronRun(Base):
+    """One row per (job, local date): a retried or duplicated cron call can't start a second run."""
+
+    __tablename__ = "cron_runs"
+
+    job: Mapped[str] = mapped_column(String(48), primary_key=True)
+    local_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agent_runs.id"))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

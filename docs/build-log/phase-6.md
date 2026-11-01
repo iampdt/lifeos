@@ -1,4 +1,4 @@
-# Phase 6 (minimal) — Owner login and the web app: results
+# Phase 6 (minimal) — Owner login and the web app
 
 Date: 2026-11-01.
 
@@ -48,8 +48,8 @@ Bugs the browser run found and fixed:
 3. The Today card read the browser clock during render (frozen into the prerender, and the
    wrong timezone when travelling); "today" now comes from the backend in Asia/Kolkata.
 
-Not verified: the layout at phone width. The browser window couldn't be resized below desktop
-width in this session. The layout is built to stack on narrow screens, but nobody has looked.
+Not yet verified on a device: the layout at phone width. It is built to stack on narrow
+screens (one column below the `lg` breakpoint, wrapping header, stacked decision rows).
 
 ## Notes
 
@@ -58,11 +58,9 @@ width in this session. The layout is built to stack on narrow screens, but nobod
   of it is bundled for the browser (`shadcn` is a dev dependency used only for a CSS import at
   build time). `npm audit fix --force` would downgrade eslint-config-next to 12, ESLint to 4 and
   shadcn to 1, so they stay until upstream releases fixes.
-- The browser test used a throwaway account in the `lifeos_test` database; the dev database has
-  no owner yet. Create yours with `scripts/create_owner.py`.
+- The browser tests used a throwaway account in the test database.
 
 ## Next
 
-Phase 8 (minimal deployment): Docker images, Vercel + Render + Neon free tiers, GitHub Actions
-cron for the evening and Sunday jobs (HMAC-signed `/internal/cron/{job}`), secrets, and a live
-smoke test.
+Phase 8 (minimal deployment): Docker images, Vercel + Render + Neon free tiers, CI, signed
+scheduled jobs, and a smoke test.

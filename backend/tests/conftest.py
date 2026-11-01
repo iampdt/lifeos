@@ -53,8 +53,8 @@ async def session_factory(migrated_database):
         # TRUNCATE doesn't fire row-level triggers, so the append-only audit log can be reset.
         await connection.execute(
             text(
-                "TRUNCATE action_executions, action_proposals, agent_runs, audit_log, "
-                "sessions, users "
+                "TRUNCATE action_executions, action_proposals, cron_runs, agent_runs, "
+                "audit_log, sessions, users "
                 "RESTART IDENTITY CASCADE"
             )
         )

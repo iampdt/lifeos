@@ -1,8 +1,8 @@
 """Schema drift detection: compare a live data source with what the mapping expects.
 
 If a required property is missing, has changed type, or lost an option the code depends on,
-the data source is reported as drifted and its repository must not be used for writes
-(design §6.2: fail closed).
+the data source is reported as drifted (architecture §3.2), in `GET /notion/status` and
+`scripts/notion_check.py`.
 """
 
 from __future__ import annotations

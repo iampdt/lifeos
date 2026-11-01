@@ -1,4 +1,5 @@
 -r requirements.txt
-pytest>=8,<9
-pytest-asyncio>=0.23,<2
-ruff>=0.5
+pytest>=8.4,<9
+pytest-asyncio>=1.4,<2
+# Pinned so local runs and CI format code identically.
+ruff==0.17.3

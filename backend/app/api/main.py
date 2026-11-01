@@ -1,4 +1,4 @@
-"""FastAPI application: `uvicorn app.api.main:app` (design §12).
+"""FastAPI application: `uvicorn app.api.main:app` (docs/api.md).
 
 Services (Notion client, database, LLM router, LangGraph checkpointer) are built once in the
 lifespan. Tests pass ready-made `Services` to `create_app` instead.
@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.api.cron import router as cron_router
 from app.api.errors import ApiError, error_body
 from app.api.routes import router
 from app.auth.sessions import RateLimiter
@@ -36,7 +37,7 @@ class Services:
     settings: Settings
     deps: WorkflowDeps
     runner: WorkflowRunner
-    # §14: at most 5 sign-in attempts a minute (one process, one owner).
+    # Architecture §9: at most 5 sign-in attempts a minute (one process, one owner).
     login_limiter: RateLimiter = field(default_factory=lambda: RateLimiter(5, 60))
 
 
@@ -77,10 +78,15 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app(services: Services | None = None) -> FastAPI:
-    app = FastAPI(title="LifeOS", version="0.4.0", lifespan=None if services else _lifespan)
+    settings = services.settings if services else get_settings()
+    # Production doesn't publish the OpenAPI schema or the interactive docs.
+    hidden = {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    docs = hidden if settings.production else {}
+    app = FastAPI(title="LifeOS", version="0.8.0", lifespan=None if services else _lifespan, **docs)
     if services:
         app.state.services = services
     app.include_router(router, prefix="/api/v1")
+    app.include_router(cron_router, prefix="/api/v1")
 
     @app.exception_handler(ApiError)
     async def _api_error(request: Request, exc: ApiError) -> JSONResponse:

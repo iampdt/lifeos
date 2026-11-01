@@ -39,7 +39,7 @@ class NotionValidation(NotionError):
 
 
 class NotionConflict(NotionError):
-    """409: a write collided with another write. Not retried automatically (see design §6.1)."""
+    """409: a write collided with another write. Not retried automatically (architecture §3.1)."""
 
 
 class NotionRateLimited(NotionError):

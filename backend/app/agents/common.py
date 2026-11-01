@@ -1,7 +1,7 @@
 """Shared plumbing for specialist agents: one structured LLM call, never an exception.
 
 An agent that can't reach a model returns no value and an error string; the caller then uses
-its deterministic fallback (design §8.6).
+its deterministic fallback (architecture §5.5).
 """
 
 from __future__ import annotations

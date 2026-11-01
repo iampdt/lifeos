@@ -17,7 +17,11 @@ For local http development, run the backend with `LIFEOS_COOKIE_SECURE=false`; t
 
 | Page | What it does |
 | --- | --- |
-| `/login` | Owner sign-in (create the account with `backend/scripts/create_owner.py`) |
+| `/login` | Owner sign-in (the account is created with `backend/scripts/create_owner.py`) |
 | `/` Command Center | Today's tasks, evening check-in and morning briefing, recent runs, chat, approvals drawer |
 | `/weekly` | Weekly review: numbers, AI draft, a decision per overdue task, Inbox triage, approval |
 | `/settings` | Write switch, models, permission modes, Notion connection and schema drift (read-only) |
+
+Data flows through TanStack Query; `src/lib/api.ts` adds the CSRF token to every change and
+reads chat answers as a stream. In production the app is built by Vercel; `Dockerfile` builds a
+standalone server for the local container stack.

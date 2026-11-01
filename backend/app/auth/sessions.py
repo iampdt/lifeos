@@ -1,4 +1,4 @@
-"""Server-side sessions for the owner (design D7, §14).
+"""Server-side sessions for the owner (decision D7, architecture §9).
 
 The browser holds a random token in an HttpOnly cookie; the database stores only its SHA-256.
 Each session also has a CSRF token, returned by login and `/auth/me`, that the frontend sends

@@ -2,7 +2,7 @@
 
 The model only chooses among candidates code has already filtered; its answer is rejected if it
 names an unknown task, repeats one, or picks more than the free slots. A rejected or missing
-answer falls back to "P0, then P1, then earliest Due" (design §8.6).
+answer falls back to "P0, then P1, then earliest Due" (architecture §5.5).
 """
 
 from __future__ import annotations

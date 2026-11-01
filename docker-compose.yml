@@ -1,4 +1,4 @@
-# Local development services. Credentials here are for the local container only.
+# Local development services. Credentials here are for the local containers only.
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -16,6 +16,33 @@ services:
       interval: 2s
       timeout: 3s
       retries: 20
+
+  # The full stack in containers: `docker compose --profile app up --build`.
+  # Uses the repo-root .env; cookies are not Secure because this is plain http on localhost.
+  backend:
+    profiles: ["app"]
+    build: ./backend
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://lifeos:lifeos@db:5432/lifeos
+      LIFEOS_COOKIE_SECURE: "false"
+      PORT: "8000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    profiles: ["app"]
+    build:
+      context: ./frontend
+      args:
+        LIFEOS_BACKEND_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
 
 volumes:
   lifeos-pg:

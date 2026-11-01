@@ -1,4 +1,4 @@
-"""Domain rules as pure functions (design §7). Rule IDs appear in proposals and logs.
+"""Domain rules as pure functions (architecture §4). Rule IDs appear in proposals and logs.
 
 Task status and priority are Notion option names ("Next", "P1"); `Vocabulary` maps them back
 to the semantic keys in the mapping, so no rule hard-codes a display name.
@@ -62,7 +62,7 @@ def free_slots(tasks: Iterable[Task], day: date, vocab: Vocabulary) -> int:
 
 
 def fallback_order(tasks: Iterable[Task], vocab: Vocabulary) -> list[Task]:
-    """Deterministic planning order (design §8.6): P0, then P1, …, then earliest Due."""
+    """Deterministic planning order (architecture §5.5): P0, then P1, …, then earliest Due."""
     return sorted(
         tasks, key=lambda t: (vocab.priority_rank(t), t.due or date.max, t.title.casefold())
     )

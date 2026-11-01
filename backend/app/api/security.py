@@ -1,4 +1,4 @@
-"""Who may call the API (design §14).
+"""Who may call the API (architecture §9).
 
 Two ways in, both checked on every request except `/health` and login:
 - the owner's browser session (HttpOnly cookie); requests that change something must also send

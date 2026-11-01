@@ -2,7 +2,8 @@
 
 Responsibilities: authentication headers, rate limiting, retries with backoff, pagination and
 typed errors. The two write methods (`update_page`, `create_page`) are called only by the
-executor, after a proposal has been approved (design §6.4). There is no archive or delete method.
+executor, after a proposal has been approved (architecture §3.4). There is no archive or delete
+method.
 """
 
 from __future__ import annotations

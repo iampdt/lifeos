@@ -5,9 +5,10 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from dotenv import dotenv_values
-from pydantic import SecretStr
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -17,6 +18,9 @@ ENV_FILE = REPO_ROOT / ".env"
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ENV_FILE, env_file_encoding="utf-8", extra="ignore")
+
+    # "production" hides the OpenAPI docs and always uses Secure cookies.
+    lifeos_env: Literal["development", "production"] = "development"
 
     notion_token: SecretStr | None = None
     notion_version: str = "2025-09-03"
@@ -28,13 +32,14 @@ class Settings(BaseSettings):
     notion_profile: str = "live"
     timezone: str = "Asia/Kolkata"
 
+    # Either a SQLAlchemy asyncpg URL or a plain libpq URL such as Neon's (see app/db/session.py).
     database_url: str = "postgresql+asyncpg://lifeos:lifeos@localhost:5433/lifeos"
-    # Global kill switch: no Notion write happens unless this is explicitly true (design §9.3).
+    # Kill switch: no Notion write happens unless this is explicitly true (architecture §6.3).
     lifeos_writes_enabled: bool = False
 
     gemini_api_key: SecretStr | None = None
     # Pinned versions, tried in order. "fast" parses and plans; "smart" writes reviews.
-    # Chosen 2026-11-01 from measured calls (docs/progress/phase-4b.md).
+    # Chosen 2026-11-01 from measured calls (docs/build-log/phase-4b.md).
     llm_fast_models: str = "gemini-3.5-flash-lite,gemini-3.1-flash-lite"
     llm_smart_models: str = "gemini-3.5-flash,gemini-3.5-flash-lite"
     llm_timeout_seconds: float = 30.0
@@ -47,14 +52,29 @@ class Settings(BaseSettings):
     lifeos_cookie_secure: bool = True
     lifeos_session_days: int = 14
 
+    # Shared secret for HMAC-signed cron calls (`POST /internal/cron/{job}`). Unset disables them.
+    lifeos_cron_secret: SecretStr | None = None
+
+    @model_validator(mode="after")
+    def _production_is_strict(self) -> Settings:
+        if self.lifeos_env == "production":
+            self.lifeos_cookie_secure = True
+        return self
+
+    @property
+    def production(self) -> bool:
+        return self.lifeos_env == "production"
+
     def model_chain(self, tier: str) -> list[str]:
         raw = self.llm_smart_models if tier == "smart" else self.llm_fast_models
         return [name.strip() for name in raw.split(",") if name.strip()]
 
     @property
     def checkpoint_url(self) -> str:
-        # LangGraph's Postgres checkpointer uses psycopg, not SQLAlchemy's asyncpg URL form.
-        return self.database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+        # LangGraph's Postgres checkpointer uses psycopg (libpq URL form), not asyncpg.
+        from app.db.session import libpq_url
+
+        return libpq_url(self.database_url)
 
 
 @lru_cache

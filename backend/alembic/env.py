@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import get_settings
 from app.db.models import Base
+from app.db.session import async_url
 
 config = context.config
 if config.config_file_name is not None and config.attributes.get("configure_logger", True):
@@ -24,7 +25,7 @@ def include_name(name, type_, parent_names) -> bool:
 
 
 def database_url() -> str:
-    return config.get_main_option("sqlalchemy.url") or get_settings().database_url
+    return async_url(config.get_main_option("sqlalchemy.url") or get_settings().database_url)
 
 
 def run_migrations_offline() -> None:

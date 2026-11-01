@@ -1,4 +1,4 @@
-"""What LifeOS may write, and how each action kind is handled (design §9.3).
+"""What LifeOS may write, and how each action kind is handled (architecture §6.3).
 
 The allowlist is code-reviewed configuration: a write that touches any field not listed here
 is refused by the executor, whatever the proposal says.

@@ -1,4 +1,4 @@
-"""Check-in specialist: turn the owner's evening reply into structure (design §8.2).
+"""Check-in specialist: turn the owner's evening reply into structure (architecture §5.1).
 
 The model extracts only what is explicitly said. Code then checks every reference against the
 tasks and books that were shown, clamps numbers to sane ranges, and records what it dropped.

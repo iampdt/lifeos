@@ -1,4 +1,4 @@
-"""Evening check-in and nightly plan (design §8.2).
+"""Evening check-in and nightly plan (architecture §5.1).
 
 load → ⏸ ask "what did you finish?" → parse → plan tomorrow → propose → ⏸ approve → execute
 → summarize

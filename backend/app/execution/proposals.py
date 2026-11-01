@@ -1,4 +1,4 @@
-"""Proposal lifecycle: propose → (approve | reject | expire), with idempotency (design §9.1, §9.4).
+"""Proposal lifecycle: propose → approve | reject | expire, with idempotency (architecture §6).
 
 pending ──approve──► approved ──(executor)──► executing ──► executed | failed | stale
    ├──reject──► rejected

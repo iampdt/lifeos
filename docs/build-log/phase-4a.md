@@ -1,4 +1,4 @@
-# Phase 4a — Approval and execution pipeline: results
+# Phase 4a — Approval and execution pipeline
 
 Date: 2026-11-01.
 
@@ -46,7 +46,7 @@ allowlist violations are refused; the kill switch blocks everything; dependencie
 a rejected dependency fails its dependants; the hand-typed `1/11/26` habit row is found and keeps
 its title, while new rows are `dd/mm/yyyy`.
 
-## Notion change made with owner approval
+## Workspace change
 
 - Tasks → `Month Key` formula replaced with `if(empty(prop("Due")), "", formatDate(prop("Due"), "YYYY-MM"))`.
   Verified: matches LifeOS's month on all 49 dated tasks.

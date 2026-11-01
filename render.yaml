@@ -1,0 +1,46 @@
+# Render Blueprint for the LifeOS API (free web tier, Docker).
+# Values marked `sync: false` are entered once in the Render dashboard when the Blueprint is
+# created; see docs/deployment.md.
+services:
+  - type: web
+    name: lifeos-api
+    runtime: docker
+    plan: free
+    region: singapore
+    rootDir: backend
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/v1/health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: LIFEOS_ENV
+        value: production
+      - key: TIMEZONE
+        value: Asia/Kolkata
+      - key: NOTION_PROFILE
+        value: live
+      # Kill switch: start with writes off, turn on after the smoke test.
+      - key: LIFEOS_WRITES_ENABLED
+        value: "false"
+      - key: DATABASE_URL
+        sync: false
+      - key: NOTION_TOKEN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: NOTION_DS_TASKS
+        sync: false
+      - key: NOTION_DS_GOALS
+        sync: false
+      - key: NOTION_DS_HABITS
+        sync: false
+      - key: NOTION_DS_WEEKS
+        sync: false
+      - key: NOTION_DS_MONTHS
+        sync: false
+      - key: NOTION_DS_BOOKS
+        sync: false
+      - key: LIFEOS_API_TOKEN
+        generateValue: true
+      - key: LIFEOS_CRON_SECRET
+        generateValue: true

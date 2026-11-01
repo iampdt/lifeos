@@ -1,4 +1,4 @@
-# Phase 4b — LLM layer, workflows and API: results
+# Phase 4b — LLM layer, workflows and API
 
 Date: 2026-11-01.
 
@@ -30,7 +30,7 @@ Rules enforced in code, whatever the model says:
 - R1: a plan naming an unknown task, a duplicate, or more tasks than free slots is rejected and
   replaced by the rule-based order.
 - R6: the nightly and morning plans never touch overdue tasks. Only the weekly review proposes
-  carry forward / reschedule / cancel, and the owner decides each one (defaults are the AI's
+  carry forward / reschedule / cancel, and the owner decides each one (defaults are the model's
   recommendation, dates are allocated by code into days with a free slot).
 - R7: every moved task gets Week and Month links. A missing page becomes a `week.create` /
   `month.create` proposal that the move depends on.
@@ -50,22 +50,18 @@ the numbers. Each of these is labelled in the run's warnings.
 | Unit + database tests | **132 passed**: rules, router fallback and budget, agent validation, prompt sanitising, new action kinds, the R7 edit guard, approval expiry, end-to-end workflow runs (FakeNotion + MockLLM + checkpointer + Postgres), API auth and flows |
 | Live tests (`LIFEOS_LIVE_TESTS=1`) | 5 passed (Phase 4a read checks and sandbox write cycle still green) |
 | Live dry run: evening check-in on Life OS, writes off | Gemini parsed the reply; no proposals, correctly: every open task is due today or overdue, and overdue tasks aren't moved nightly (R6) |
-| Live dry run: morning briefing | 2 priorities today, "5 overdue tasks wait for Sunday's review", "No scorecard for 30 Oct, 31 Oct", 4 done this week (all match Notion) |
-| Live dry run: weekly review, stopped at the decision step | Real metrics (4 of 10 planned done), an AI narrative and a recommendation for each of 7 overdue tasks. It exposed reference codes leaking into the prose; fixed (decision I7) |
+| Live dry run: morning briefing | Today's priorities, the overdue count, days without a scorecard and the week's done count all matched Notion |
+| Live dry run: weekly review, stopped at the decision step | Real metrics, a narrative and a recommendation for every overdue task. It exposed reference codes leaking into the prose; fixed (decision I7) |
 | Full loop on the sandbox, writes on | 5 proposals (mark done, scorecard row, `week.create`, `month.create`, carry the backlog task to 2 Nov) → approved → **5 verified**, then read back independently: Due, Week and Month links, `01/11/2026` habit row, notes |
-| API smoke test with uvicorn | Lifespan starts the Postgres checkpointer; `/health` public, 401 without the token, `/tasks?view=today` returns 7 live tasks, a morning run completes over HTTP |
+| API smoke test with uvicorn | Lifespan starts the Postgres checkpointer; `/health` public, 401 without the token, `/tasks?view=today` returns the live tasks, a morning run completes over HTTP |
 
-Measured model latency on the free tier was uneven: 1.4–4 s per call in the Phase 4b probe,
+Measured model latency on the free tier was uneven: 1.4–4 s per call when choosing models,
 but 18 s for one check-in parse and 12 s for the weekly review (2,272 output tokens including
 thinking) during the dry runs. The 30 s timeout and fallback chain cover this; Phase 5 adds
 latency and cost metrics.
 
-## Open item for the owner
-
-- Habits `Screen Time` is recorded in **hours** (decision I6). Say if you'd rather use minutes.
-
 ## Next
 
 Phase 6 (minimal frontend): Command Center with the check-in, approvals drawer and the weekly
-decisions screen on top of these endpoints; session login replaces the bearer token. Chat with
-the Chief of Staff (§8.5) arrives with that UI.
+decisions screen on top of these endpoints; session login alongside the bearer token. Chat with
+the Chief of Staff arrives with that UI.

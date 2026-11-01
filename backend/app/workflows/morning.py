@@ -1,4 +1,4 @@
-"""Morning briefing (design §8.1).
+"""Morning briefing (architecture §5.2).
 
 load → plan → propose → ⏸ approve (only if something was proposed) → execute → brief
 

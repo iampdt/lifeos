@@ -1,0 +1,68 @@
+# Scheduled LifeOS jobs (the API has no in-process scheduler; its free host sleeps when idle).
+# Needs repository secrets LIFEOS_API_URL (the API's base URL) and LIFEOS_CRON_SECRET (same
+# value as the API's). Without them every run is skipped. Times are UTC; IST = UTC+5:30.
+name: Scheduled jobs
+
+on:
+  schedule:
+    - cron: "0 2 * * *"    # 07:30 IST daily: expire stale proposals, then the morning briefing
+    - cron: "30 15 * * *"  # 21:00 IST daily: evening check-in
+    - cron: "30 12 * * 0"  # 18:00 IST Sunday: weekly review
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Job to run now
+        type: choice
+        options: [morning_briefing, evening_checkin, weekly_review, expire_proposals]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lifeos-cron
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      API_URL: ${{ secrets.LIFEOS_API_URL }}
+      CRON_SECRET: ${{ secrets.LIFEOS_CRON_SECRET }}
+      SCHEDULE: ${{ github.event.schedule }}
+      JOB_INPUT: ${{ inputs.job }}
+    steps:
+      - name: Call the API
+        run: |
+          set -eu
+          if [ -z "$API_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::notice::LIFEOS_API_URL or LIFEOS_CRON_SECRET is not set; nothing to do."
+            exit 0
+          fi
+          case "$SCHEDULE" in
+            "0 2 * * *")   jobs="expire_proposals morning_briefing" ;;
+            "30 15 * * *") jobs="evening_checkin" ;;
+            "30 12 * * 0") jobs="weekly_review" ;;
+            *)             jobs="$JOB_INPUT" ;;
+          esac
+
+          # Wake the instance first: a sleeping free instance takes about a minute to start.
+          curl -fsS --retry 6 --retry-delay 15 --retry-all-errors --max-time 90 \
+            "$API_URL/api/v1/health" > /dev/null
+
+          for job in $jobs; do
+            for attempt in 1 2 3; do
+              ts=$(date +%s)
+              sig=$(printf '%s.%s.' "$ts" "$job" \
+                | openssl dgst -sha256 -hmac "$CRON_SECRET" -hex | awk '{print $NF}')
+              # Safe to retry: the API runs each job at most once per day.
+              if curl -fsS --max-time 120 -X POST \
+                  -H "X-LifeOS-Timestamp: $ts" -H "X-LifeOS-Signature: $sig" \
+                  "$API_URL/api/v1/internal/cron/$job"; then
+                echo
+                break
+              fi
+              [ "$attempt" = 3 ] && exit 1
+              sleep 20
+            done
+          done

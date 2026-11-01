@@ -1,60 +1,88 @@
 # LifeOS
 
-A personal AI chief of staff that runs on top of an existing Notion productivity system.
+A chief of staff for a personal productivity system in Notion.
 
-Notion stays the source of truth. LifeOS reads it, prepares briefings and reviews, and
-proposes changes. Nothing is written back to Notion until the owner approves it, and every
-write is verified and logged.
+LifeOS reads the workspace and runs its daily and weekly routines: an evening check-in that
+turns a free-text reply into updates, a morning briefing, and a Sunday review. It also answers
+questions in a chat. Everything it wants to change becomes a **proposal**. Nothing is written to
+Notion until the owner approves it, and every write is checked by reading it back and recorded
+in an append-only audit log.
 
-**Status:** Phase 6 (minimal frontend) done (2026-11-01). A Next.js web app with owner sign-in,
-a Command Center (today, evening check-in, morning briefing, chat, approvals), the weekly review
-and settings, on top of the LangGraph workflows and approval-gated Notion writes from Phase 4.
-Verified end to end in the browser against a sandbox copy of the workspace. LifeOS is the second
-flagship portfolio project.
+## How it works
 
-## Documents
-
-| Document | What it covers |
-| --- | --- |
-| [docs/01-architecture.md](docs/01-architecture.md) | System design: architecture, Notion adapter, agents, approvals, data model, API contracts, security, deployment |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Phases, exit criteria and estimates |
-| [docs/progress/phase-3.md](docs/progress/phase-3.md) | Phase 3 results: what was built and how it was verified against the live workspace |
-| [docs/progress/phase-4a.md](docs/progress/phase-4a.md) | Phase 4a results: proposals, approvals, executor, audit log, sandbox writes |
-| [docs/progress/phase-4b.md](docs/progress/phase-4b.md) | Phase 4b results: LLM layer, workflows, API, live dry runs |
-| [docs/progress/phase-6.md](docs/progress/phase-6.md) | Phase 6 results: owner login, chat, approvals API and the web app |
-| [frontend/README.md](frontend/README.md) | Web app: pages and how to run it |
-| `docs/private/` | Workspace discovery report (personal data; git-ignored) |
-
-## Planned stack
-
-FastAPI · Pydantic · SQLAlchemy · PostgreSQL (Neon, pgvector) · LangGraph · Gemini (Groq fallback, mock for tests) ·
-Next.js · TypeScript · Tailwind · shadcn/ui · Docker · Vercel + Render free tiers.
-
-## Running the backend locally
-
-```bash
-docker compose up -d db                                  # Postgres 16 + pgvector on localhost:5433
-cd backend
-python3.12 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/alembic upgrade head                           # create the tables
-.venv/bin/python -m pytest                              # unit tests, no network
-LIFEOS_LIVE_TESTS=1 .venv/bin/python -m pytest tests/live  # live: reads Life OS, writes only to the sandbox
-.venv/bin/python -m scripts.notion_check --profile live   # or --profile sandbox
-
-# Run a workflow from the terminal; it stops whenever it needs an answer you didn't give
-.venv/bin/python -m scripts.run_workflow evening_checkin --answer "Finished X, did DSA, slept 7h"
-.venv/bin/python -m scripts.run_workflow --resume RUN_ID --answer '{"approve": "all"}'
-.venv/bin/python -m scripts.run_workflow evening_checkin --profile sandbox --writes ...  # sandbox writes
-
-# Owner account (prompts for the password; never pass it as an argument)
-.venv/bin/python -m scripts.create_owner you@example.com
-
-# API, then the web app in another terminal
-.venv/bin/uvicorn app.api.main:app --port 8000      # LIFEOS_COOKIE_SECURE=false for local http
-cd ../frontend && npm install && npm run dev         # http://localhost:3000
+```
+ Browser ──► Next.js ── /api/* ──► FastAPI ──► Notion API (source of truth)
+                                     │  ├────► Gemini (structured output only)
+ GitHub Actions ── signed cron ──────┘  └────► Postgres (proposals, runs, audit, sessions)
 ```
 
-Notion is only written when `LIFEOS_WRITES_ENABLED=true` (the sandbox profile can also use
-`--writes`). Every write still needs approval.
+- **Workflows are explicit graphs** (LangGraph). Loading data and applying rules is plain code;
+  the model only parses free text, prioritises and summarises, and every answer is validated
+  against a schema and the rules (for example, at most 3 major tasks a day).
+- **The model proposes, code executes.** Approved proposals go through a deterministic executor:
+  kill switch, field allowlist, stale detection, find-or-create, read-after-write verification,
+  audit.
+- **Runs can wait.** A check-in pauses for the owner's reply and again for approval, checkpointed
+  in Postgres, and resumes hours later.
+- **Degrades without a model.** If every model fails, planning falls back to "P0, then P1,
+  then earliest Due", and reviews are built from the numbers alone.
 
-Configuration comes from the repo-root `.env` (see `.env.example`).
+## Features
+
+- Evening check-in with a nightly plan for tomorrow
+- Morning briefing that keeps each day to 3 major tasks
+- Weekly review: metrics, a drafted review, a decision for every overdue task, Inbox triage
+- Chat that answers from the workspace and proposes changes
+- Approvals drawer with before → after for every change
+- Owner sign-in with server-side sessions and CSRF protection
+- Scheduled jobs through signed calls from GitHub Actions
+
+## Stack
+
+| Layer | Technology |
+| --- | --- |
+| API | Python 3.12, FastAPI, Pydantic, SQLAlchemy (async), Alembic, LangGraph, `google-genai` |
+| Data | PostgreSQL (Neon in production), the Notion API |
+| Web | Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui, TanStack Query |
+| Operations | Docker, Render, Vercel, GitHub Actions |
+
+## Getting started
+
+```bash
+cp .env.example .env            # Notion token and data-source IDs, Gemini key
+docker compose up -d db
+cd backend && python3.12 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+.venv/bin/alembic upgrade head && .venv/bin/python -m scripts.create_owner you@example.com
+LIFEOS_COOKIE_SECURE=false .venv/bin/uvicorn app.api.main:app --reload --port 8000
+cd ../frontend && npm install && npm run dev        # http://localhost:3000
+```
+
+Details: [docs/development.md](docs/development.md). Deployment: [docs/deployment.md](docs/deployment.md).
+
+## Repository
+
+```
+backend/    FastAPI app, workflows, agents, Notion integration, tests (see backend/README.md)
+frontend/   Next.js web app (see frontend/README.md)
+docs/       architecture, decisions, API, development, deployment, roadmap, build log
+.github/    CI and scheduled jobs
+render.yaml Render Blueprint for the API
+```
+
+## Documentation
+
+| Document | Contents |
+| --- | --- |
+| [Architecture](docs/architecture.md) | System design: Notion integration, rules, workflows, approvals, LLM layer, data model, security |
+| [Decisions](docs/decisions.md) | Why it's built this way, with the alternatives considered |
+| [API](docs/api.md) | Endpoints, authentication, run and proposal shapes, chat events, scheduled jobs |
+| [Development](docs/development.md) | Setup, configuration, tests, scripts, conventions |
+| [Deployment](docs/deployment.md) | Free-tier deployment and operations |
+| [Roadmap](docs/roadmap.md) | Phases and status |
+| [Build log](docs/build-log/) | What each phase built and how it was verified |
+
+## Status
+
+The MVP is complete and verified locally: the workflows, chat, approvals and the web app run
+end to end against a sandbox copy of the workspace, in containers, with CI. Next: the first
+cloud deployment, then the monthly career review and memory ([roadmap](docs/roadmap.md)).
