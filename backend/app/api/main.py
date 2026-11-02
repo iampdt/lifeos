@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -23,6 +24,7 @@ from app.api.routes import router
 from app.auth.sessions import RateLimiter
 from app.core.config import Settings, env_values, get_settings
 from app.db.session import make_engine, make_session_factory
+from app.demo.setup import demo_notion, demo_specs, demo_user, ensure_demo_database, reset_demo
 from app.llm.factory import build_router
 from app.notion.client import NotionClient
 from app.notion.errors import NotionError
@@ -39,9 +41,32 @@ class Services:
     runner: WorkflowRunner
     # Architecture §9: at most 5 sign-in attempts a minute (one process, one owner).
     login_limiter: RateLimiter = field(default_factory=lambda: RateLimiter(5, 60))
+    # Demo only: how often visitors may open a session or reset the shared workspace.
+    demo_limiter: RateLimiter = field(default_factory=lambda: RateLimiter(30, 60))
+    reset_limiter: RateLimiter = field(default_factory=lambda: RateLimiter(2, 60))
+
+
+async def build_demo_services(settings: Settings, stack: AsyncExitStack) -> Services:
+    """The public demo: same app, in-memory sample workspace, in-memory run checkpoints."""
+    ensure_demo_database(settings.database_url)
+    engine = make_engine(settings.database_url)
+    stack.push_async_callback(engine.dispose)
+    deps = WorkflowDeps(
+        make_session_factory(engine),
+        demo_notion(),
+        demo_specs(settings.notion_mapping_path),
+        build_router(settings),
+        writes_enabled=True,  # writes go to the in-memory workspace
+        tz=ZoneInfo(settings.timezone),
+    )
+    await reset_demo(deps)
+    await demo_user(deps.session_factory)
+    return Services(settings, deps, WorkflowRunner(deps, InMemorySaver()))
 
 
 async def build_services(settings: Settings, stack: AsyncExitStack) -> Services:
+    if settings.lifeos_demo_mode:
+        return await build_demo_services(settings, stack)
     if settings.notion_token is None:
         raise RuntimeError("NOTION_TOKEN is not set")
     client = await stack.enter_async_context(

@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.core.config import BACKEND_ROOT
+from app.demo.notion import schema_for
 from app.notion.mapping import DataSourceSpec, load_mapping
 
 MAPPING_PATH = BACKEND_ROOT / "config" / "notion_mapping.yaml"
@@ -106,22 +107,4 @@ def task_page(
 
 def data_source_schema(spec: DataSourceSpec) -> dict[str, Any]:
     """A data-source object whose properties exactly match the mapping."""
-    properties: dict[str, Any] = {}
-    for prop in spec.properties.values():
-        body: dict[str, Any] = {}
-        if prop.type in ("select", "status", "multi_select"):
-            body = {
-                "options": [{"id": v, "name": v, "color": "default"} for v in prop.values.values()]
-            }
-        properties[prop.name] = {
-            "id": prop.name[:4],
-            "name": prop.name,
-            "type": prop.type,
-            prop.type: body,
-        }
-    return {
-        "object": "data_source",
-        "id": spec.data_source_id,
-        "title": rich(spec.logical_name.title()),
-        "properties": properties,
-    }
+    return schema_for(spec)

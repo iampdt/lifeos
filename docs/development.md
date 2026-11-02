@@ -35,6 +35,16 @@ cd frontend && npm run dev
 
 Or run the whole stack in containers: `docker compose --profile app up --build`.
 
+To run the public demo locally instead (no Notion needed), create a database whose name contains
+`demo`, migrate it, and start the API with `LIFEOS_DEMO_MODE=true`:
+
+```bash
+docker compose exec db psql -U lifeos -c "CREATE DATABASE lifeos_demo"
+export DATABASE_URL=postgresql+asyncpg://lifeos:lifeos@localhost:5433/lifeos_demo
+.venv/bin/alembic upgrade head
+LIFEOS_DEMO_MODE=true LIFEOS_COOKIE_SECURE=false .venv/bin/uvicorn app.api.main:app --port 8000
+```
+
 ## Configuration
 
 All settings come from environment variables, read from the repo-root `.env` in development.
@@ -73,6 +83,7 @@ differs from the live one before writing.
 | `python -m scripts.run_workflow evening_checkin --answer "…"` | Run a workflow from the terminal; it stops when it needs an answer you didn't give. Continue with `--resume RUN_ID --answer '{"approve": "all"}'`. `--writes` works only with `--profile sandbox` |
 | `python -m scripts.create_owner EMAIL [--reset]` | Create the owner account or set a new password (signs out every session) |
 | `python -m scripts.smoke_test --api URL [--app URL --chat]` | Read-only checks against a deployment (needs `LIFEOS_API_TOKEN`) |
+| `python -m evals.run [--models …] [--suites …]` | Evaluation set against real models; writes `docs/evals/results.md` ([method](evals/README.md)) |
 
 ## Conventions
 

@@ -31,4 +31,5 @@ config/         notion_mapping.yaml (logical names → Notion properties and opt
 alembic/        migrations
 scripts/        notion_check, run_workflow, create_owner, smoke_test, start.sh
 tests/          unit tests; db/ (Postgres); live/ (real Notion, opt-in)
+evals/          evaluation set (cases/), scorer and runner for real models
 ```

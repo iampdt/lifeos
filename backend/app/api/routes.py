@@ -20,6 +20,7 @@ from app.api.errors import ApiError
 from app.api.security import Principal, require_owner, services
 from app.auth.sessions import SESSION_COOKIE, SessionService
 from app.db.models import ActionProposal, AgentRun
+from app.demo.setup import demo_user, reset_demo
 from app.notion.errors import NotionError
 from app.notion.schema import check_data_source
 from app.permissions.policy import DEFAULT_MODES
@@ -71,6 +72,40 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@router.get("/meta")
+async def meta(request: Request) -> dict[str, Any]:
+    """Public facts the sign-in page needs before anyone is signed in."""
+    return {"demo": services(request).settings.lifeos_demo_mode}
+
+
+@router.post("/auth/demo")
+async def demo_login(request: Request, response: Response) -> dict[str, Any]:
+    """Demo only: a session on the shared demo account, no password."""
+    svc = services(request)
+    if not svc.settings.lifeos_demo_mode:
+        raise ApiError(404, "http_error", "Not Found")
+    if not svc.demo_limiter.allow("demo"):
+        raise ApiError(429, "rate_limited", "too many demo sessions; try again in a minute", True)
+    ttl = timedelta(days=1)
+    user = await demo_user(svc.deps.session_factory)
+    async with svc.deps.session_factory() as db, db.begin():
+        token, session = await SessionService(db, ttl=ttl, clock=svc.deps.clock).start(user)
+    _set_session_cookie(response, svc, token, ttl)
+    return {"email": user.email, "csrf_token": session.csrf_token}
+
+
+def _set_session_cookie(response: Response, svc, token: str, ttl: timedelta) -> None:
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        max_age=int(ttl.total_seconds()),
+        httponly=True,
+        secure=svc.settings.lifeos_cookie_secure,
+        samesite="lax",
+        path="/",
+    )
+
+
 @router.post("/auth/login")
 async def login(body: LoginBody, request: Request, response: Response) -> dict[str, Any]:
     svc = services(request)
@@ -84,15 +119,7 @@ async def login(body: LoginBody, request: Request, response: Response) -> dict[s
     if result is None:
         raise ApiError(401, "invalid_credentials", "wrong email or password")
     token, session, user = result
-    response.set_cookie(
-        SESSION_COOKIE,
-        token,
-        max_age=int(ttl.total_seconds()),
-        httponly=True,
-        secure=svc.settings.lifeos_cookie_secure,
-        samesite="lax",
-        path="/",
-    )
+    _set_session_cookie(response, svc, token, ttl)
     return {"email": user.email, "csrf_token": session.csrf_token}
 
 
@@ -281,6 +308,21 @@ async def chat(body: ChatBody, request: Request) -> StreamingResponse:
     )
 
 
+# --- demo --------------------------------------------------------------------------------
+
+
+@protected.post("/demo/reset")
+async def demo_reset(request: Request) -> dict[str, str]:
+    """Demo only: rebuild the shared sample workspace and clear runs and proposals."""
+    svc = services(request)
+    if not svc.settings.lifeos_demo_mode:
+        raise ApiError(404, "http_error", "Not Found")
+    if not svc.reset_limiter.allow("reset"):
+        raise ApiError(429, "rate_limited", "the demo was just reset; try again in a minute", True)
+    await reset_demo(svc.deps)
+    return {"status": "reset"}
+
+
 # --- settings and status -----------------------------------------------------------------
 
 
@@ -289,7 +331,8 @@ async def get_settings_view(request: Request) -> dict[str, Any]:
     svc = services(request)
     llm = svc.deps.llm
     return {
-        "notion_profile": svc.settings.notion_profile,
+        "demo": svc.settings.lifeos_demo_mode,
+        "notion_profile": "demo" if svc.settings.lifeos_demo_mode else svc.settings.notion_profile,
         "writes_enabled": svc.deps.writes_enabled,
         "timezone": svc.settings.timezone,
         "today": svc.deps.today().isoformat(),  # in the owner's timezone, not the browser's

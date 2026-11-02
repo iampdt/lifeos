@@ -52,6 +52,11 @@ class SessionService:
         assert user is not None
         if needs_rehash(user.password_hash):
             user.password_hash = hash_password(password)
+        token, session = await self.start(user)
+        return token, session, user
+
+    async def start(self, user: User) -> tuple[str, Session]:
+        """A new session for an already-authenticated user (password sign-in, or the demo)."""
         token = secrets.token_urlsafe(32)
         session = Session(
             user_id=user.id,
@@ -63,7 +68,7 @@ class SessionService:
         await self.db.flush()
         audit(self.db, actor="owner", event="auth.login", entity_type="user",
               entity_id=str(user.id))  # fmt: skip
-        return token, session, user
+        return token, session
 
     async def resolve(self, token: str) -> tuple[Session, User] | None:
         row = await self.db.execute(

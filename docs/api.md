@@ -39,6 +39,8 @@ Every error has the same shape:
 | Method and path | Description |
 | --- | --- |
 | `GET /health` | Liveness, public |
+| `GET /meta` | Public: `{demo}`, so the sign-in page knows which form to show |
+| `POST /auth/demo` | Demo deployments only (404 otherwise): a session on the shared demo account, no password. Returns `{email, csrf_token}` |
 | `GET /health/ready` | Database check; also returns the Notion profile, write switch and whether a model is configured |
 | `POST /auth/login` | Body `{email, password}`. Returns `{email, csrf_token}` and sets the cookie |
 | `GET /auth/me` | `{via, email, csrf_token}` |
@@ -118,6 +120,12 @@ Outcomes: `verified`, `noop`, `mismatch`, `stale`, `failed`, `blocked` (writes o
 | `answer` | `{text}` |
 | `error` | `{code, message}` (for example `llm_unavailable`) |
 | `done` | `{run_id, proposals}` |
+
+### Demo
+
+| Method and path | Description |
+| --- | --- |
+| `POST /demo/reset` | Demo deployments only: rebuild the sample workspace and clear runs and proposals. At most twice a minute |
 
 ### Workspace
 

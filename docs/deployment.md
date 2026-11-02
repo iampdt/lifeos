@@ -90,6 +90,22 @@ the API redeploys after CI passes. Approved changes are written to Notion from t
 switch lives in `render.yaml`, not the dashboard, because a Blueprint sync resets values that the
 file sets.
 
+## Public demo
+
+The Blueprint also defines `lifeos-demo-api`: the same image with `LIFEOS_DEMO_MODE=true`, an
+in-memory sample workspace and no Notion connection (see architecture §13).
+
+1. **Database.** In the Neon project, add a database named `lifeos_demo` (Databases → New
+   database). Demo mode resets its database on every start and refuses to run against a
+   database whose name doesn't contain `demo`.
+2. **API.** Sync the Blueprint (Blueprints → `lifeos` → Manual sync). Render creates
+   `lifeos-demo-api` and asks for `DATABASE_URL` (the `lifeos_demo` connection string, pooling
+   off) and `GEMINI_API_KEY`. A separate key keeps visitors' usage away from your own quota.
+3. **Web app.** Import the repository into Vercel again as a second project (for example
+   `lifeos-demo`, root directory `frontend`) with `LIFEOS_BACKEND_URL` = the demo API's URL.
+4. **Check.** Open the demo URL: the sign-in page shows **Try the demo** instead of the password
+   form.
+
 ## Operations
 
 | Task | How |

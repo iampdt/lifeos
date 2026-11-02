@@ -119,6 +119,7 @@ export type DecisionResult = {
 };
 
 export type SettingsView = {
+  demo: boolean;
   notion_profile: string;
   writes_enabled: boolean;
   timezone: string;

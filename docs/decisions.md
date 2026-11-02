@@ -71,3 +71,12 @@ replaced. Dates are when the decision was made.
 | I21 | Deploys | Render deploys only after CI passes (`autoDeployTrigger: checksPass`); the API starts with writes off until the smoke test passes |
 | I22 | Streaming through Vercel | Verified on 2026-11-02: with `Cache-Control: no-transform`, chat events pass through Vercel's external rewrite as they happen (first event at 0.2 s, answer at 2.8 s) |
 | I23 | Pasted secrets | The API ignores whitespace around the configured bearer token and cron secret, since values pasted into dashboards often carry a stray space or newline |
+
+### Evaluation and demo (2026-11-02)
+
+| # | Topic | Decision |
+| --- | --- | --- |
+| I24 | Measuring the agents | A synthetic labelled set (check-in parsing, day planning, prompt-injection cases) scored by code, run per model on demand; failed calls are errors, not wrong answers |
+| I25 | Model chain | Confirmed by the evaluation: `gemini-3.5-flash-lite` first (all cases passed, fastest), `gemini-3.1-flash-lite` as fallback |
+| I26 | Public demo | The real application on an in-memory Notion seeded relative to today, rather than screenshots or a mocked frontend, so every feature works and is verified the same way |
+| I27 | Demo isolation | One shared workspace with a visible reset and a rebuild on every start, instead of per-visitor workspaces; demo mode refuses any database not named for the demo, because it resets it |

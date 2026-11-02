@@ -85,7 +85,7 @@ export function ChatPanel() {
           {messages.length === 0 && (
             <div className="flex flex-col gap-1.5 text-sm text-muted-foreground">
               <p>Try:</p>
-              {["What's overdue?", "How did this week go?", "Move the SOLID task to Tuesday"].map((s) => (
+              {["What's overdue?", "How did this week go?", "Move my lowest-priority task to tomorrow"].map((s) => (
                 <button key={s} type="button" onClick={() => setInput(s)}
                   className="w-fit rounded-md border px-2 py-1 text-left hover:bg-muted">{s}</button>
               ))}

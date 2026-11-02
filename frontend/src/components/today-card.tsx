@@ -33,8 +33,7 @@ export function TodayCard() {
         {today.error && <p className="text-sm text-destructive">Couldn&apos;t load tasks: {today.error.message}</p>}
         {today.data?.length === 0 && <p className="text-sm text-muted-foreground">Nothing due. Plan the day in the morning briefing.</p>}
         {now && [...dueToday, ...overdue].map((task) => (
-          <a key={task.id} href={task.url} target="_blank" rel="noreferrer"
-            className="group flex items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
+          <TaskRow key={task.id} url={task.url}>
             <span className="min-w-0 flex-1 truncate">{task.title || "Untitled"}</span>
             {task.priority && <Badge variant="outline">{task.priority}</Badge>}
             {task.due && task.due < now ? (
@@ -42,10 +41,22 @@ export function TodayCard() {
             ) : (
               <span className="text-xs text-muted-foreground">{task.status}</span>
             )}
-            <ExternalLinkIcon className="size-3.5 opacity-0 group-hover:opacity-60" />
-          </a>
+            {task.url && <ExternalLinkIcon className="size-3.5 opacity-0 group-hover:opacity-60" />}
+          </TaskRow>
         ))}
       </CardContent>
     </Card>
+  );
+}
+
+const rowClass = "group flex items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted";
+
+/** A task links to its Notion page when it has one (the demo workspace has none). */
+function TaskRow({ url, children }: { url: string; children: React.ReactNode }) {
+  if (!url) return <div className={rowClass}>{children}</div>;
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className={rowClass}>
+      {children}
+    </a>
   );
 }

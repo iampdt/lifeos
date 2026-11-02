@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     # Shared secret for HMAC-signed cron calls (`POST /internal/cron/{job}`). Unset disables them.
     lifeos_cron_secret: SecretStr | None = None
 
+    # Public demo: an in-memory sample workspace instead of Notion, and a "Try the demo" sign-in.
+    # Requires a database whose name contains "demo", because the demo resets it.
+    lifeos_demo_mode: bool = False
+
     @model_validator(mode="after")
     def _production_is_strict(self) -> Settings:
         if self.lifeos_env == "production":

@@ -78,6 +78,7 @@ render.yaml Render Blueprint for the API
 | [API](docs/api.md) | Endpoints, authentication, run and proposal shapes, chat events, scheduled jobs |
 | [Development](docs/development.md) | Setup, configuration, tests, scripts, conventions |
 | [Deployment](docs/deployment.md) | Free-tier deployment and operations |
+| [Evaluation](docs/evals/README.md) | Accuracy of the model-backed agents per model, including prompt-injection cases |
 | [Roadmap](docs/roadmap.md) | Phases and status |
 | [Build log](docs/build-log/) | What each phase built and how it was verified |
 

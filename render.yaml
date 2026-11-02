@@ -46,3 +46,30 @@ services:
         generateValue: true
       - key: LIFEOS_CRON_SECRET
         generateValue: true
+
+  # Public demo: the same image on an in-memory sample workspace (no Notion). It resets its
+  # database on start, so DATABASE_URL must point at a database whose name contains "demo".
+  - type: web
+    name: lifeos-demo-api
+    runtime: docker
+    plan: free
+    region: singapore
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/v1/health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: LIFEOS_ENV
+        value: production
+      - key: LIFEOS_DEMO_MODE
+        value: "true"
+      - key: TIMEZONE
+        value: Asia/Kolkata
+      # A smaller daily budget: anyone on the internet can use the demo's chat.
+      - key: LLM_DAILY_TOKEN_BUDGET
+        value: "150000"
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { ApprovalsSheet } from "@/components/approvals-sheet";
+import { DemoBanner } from "@/components/demo-banner";
 import { useSession, useSignOut } from "@/components/session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,14 +53,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Tooltip>
                 <TooltipTrigger render={<span />}>
                   <Badge variant={settings.data.writes_enabled ? "secondary" : "outline"}>
-                    {settings.data.notion_profile === "sandbox" ? "Sandbox · " : ""}
+                    {settings.data.demo ? "Demo · " : settings.data.notion_profile === "sandbox" ? "Sandbox · " : ""}
                     {settings.data.writes_enabled ? "Writes on" : "Writes off"}
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {settings.data.writes_enabled
-                    ? "Approved changes are written to Notion."
-                    : "Approvals are recorded, but nothing is written to Notion."}
+                  {settings.data.demo
+                    ? "Approved changes are written to the sample workspace."
+                    : settings.data.writes_enabled
+                      ? "Approved changes are written to Notion."
+                      : "Approvals are recorded, but nothing is written to Notion."}
                 </TooltipContent>
               </Tooltip>
             )}
@@ -73,6 +76,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
+      {settings.data?.demo && <DemoBanner />}
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
     </div>
   );

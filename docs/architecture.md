@@ -328,6 +328,7 @@ owner's timezone.
 | API | Auth, CSRF, sessions, rate limit, approvals, chat streaming, cron signatures, production settings | Local Postgres |
 | Live | Read checks on the real workspace; write checks only on a sandbox copy | Notion |
 | Frontend | Lint, type check, production build; end-to-end runs in a browser against the sandbox | Local stack |
+| Evaluation | Accuracy of check-in parsing and day planning per model on a synthetic labelled set, including prompt-injection cases ([evals](evals/README.md)) | Gemini, on demand |
 
 No test writes to the real workspace. CI runs everything except the live tests.
 
@@ -344,6 +345,23 @@ No test writes to the real workspace. CI runs everything except the live tests.
 
 Setup and operations: [deployment.md](deployment.md).
 
+### Public demo
+
+A second deployment runs the same image with `LIFEOS_DEMO_MODE=true`, for anyone to try without
+a Notion account:
+
+- **Workspace:** an in-memory implementation of the Notion client (`app/demo/notion.py`, the
+  same one the tests use) seeded with a believable week, relative to today (`app/demo/seed.py`).
+  Everything above it (repositories, rules, workflows, agents, approvals, executor with
+  read-after-write verification, chat) runs unchanged.
+- **Access:** `POST /auth/demo` opens a normal session on a shared demo account with no password.
+  The password form isn't offered.
+- **Reset:** the workspace is rebuilt and the run, proposal and audit tables are emptied on every
+  start (the free host restarts after an idle spell) and from the in-app **Reset demo** button
+  (rate-limited). Because a reset wipes tables, demo mode refuses to start unless the database
+  name contains `demo`.
+- **Limits:** a separate, smaller daily token budget; no scheduled jobs.
+
 ## 14. Planned
 
 - **Monthly career review** (R10) with `month.close` and `month.create`.
@@ -351,9 +369,10 @@ Setup and operations: [deployment.md](deployment.md).
   pages (pgvector) with cited answers.
 - **Goal and learning specialists**, and an optional `goal.set_current` action.
 - **Editable settings:** permission modes and schedules from the UI.
-- **Quality bar:** an evaluation set of check-in messages and workspace states with expected
-  outputs (parsing and planning accuracy per model), latency and cost reports from `agent_runs`,
-  and a demo mode that runs the same code on a synthetic workspace for a public deployment.
+- **Quality bar:** latency and cost reports from `agent_runs`; more evaluation suites (weekly
+  review, chat tool use).
+- **Multi-user:** sign-up, Notion OAuth per user, per-user data, onboarding from a Notion
+  template, paid model and hosting tiers.
 - Refuse writes to a data source whose schema has drifted (today drift is reported, not enforced).
 - A second LLM provider in the fallback chain.
 

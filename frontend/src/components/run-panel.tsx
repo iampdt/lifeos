@@ -104,6 +104,11 @@ function QuestionStep({ request, onAnswer }: { request: QuestionRequest; onAnswe
           </label>
         ))}
       </section>
+      {request.books.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Reading: {request.books.map((b) => b.title).join(", ")}. Mention pages read in your own words.
+        </p>
+      )}
       <section className="flex flex-col gap-2">
         <h3 className="text-sm font-medium">Scorecard</h3>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -134,7 +139,7 @@ function QuestionStep({ request, onAnswer }: { request: QuestionRequest; onAnswe
       <section className="flex flex-col gap-2">
         <Label htmlFor="checkin-text">Anything else, in your own words</Label>
         <Textarea id="checkin-text" rows={4} value={text} onChange={(e) => setText(e.target.value)}
-          placeholder="Finished the SOLID notes, read 20 pages of DDIA, learned that…" />
+          placeholder="Finished the API docs, read 20 pages, learned that…" />
         <p className="text-xs text-muted-foreground">
           The AI reads this to find finished tasks, habits, pages read and new to-dos. Ticks above win.
         </p>
@@ -193,7 +198,7 @@ export function DecisionsStep({ request, onAnswer }: { request: DecisionsRequest
           <Badge variant="outline">{review.source === "ai" ? "AI draft" : "From the numbers"}</Badge>
         </div>
         <p className="text-sm">{review.summary}</p>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <List title="Wins" items={review.wins} />
           <List title="Missed" items={review.misses} />
           <List title="Bottlenecks" items={review.bottlenecks} />
@@ -370,10 +375,10 @@ function RunSummary({ run }: { run: RunView }) {
     <div className="flex flex-col gap-4 text-sm">
       <Notice tone="info" title="Done">
         {s.proposals ? `${s.proposals.approved} approved, ${s.proposals.rejected} rejected.` : "Nothing needed approval."}
-        {execution.length > 0 && ` Notion: ${execution.map(([k, v]) => `${v} ${k}`).join(", ")}.`}
+        {execution.length > 0 && ` Writes: ${execution.map(([k, v]) => `${v} ${k}`).join(", ")}.`}
       </Notice>
       {run.workflow === "evening_checkin" && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <List title="Finished" items={s.done} />
           <List title="Left for Sunday's review" items={s.partial} />
           <List title="Proposed for tomorrow" items={s.tomorrow?.proposed} />
@@ -381,7 +386,7 @@ function RunSummary({ run }: { run: RunView }) {
         </div>
       )}
       {run.workflow === "morning_briefing" && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <List title="Today's priorities" items={s.priorities} />
           <List title="Proposed for today" items={s.proposed_for_today} />
           <List title="Observations" items={s.observations} />
