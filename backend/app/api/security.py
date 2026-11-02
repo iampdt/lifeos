@@ -48,8 +48,9 @@ async def require_owner(
         if expected is None:
             raise ApiError(503, "auth_not_configured", "LIFEOS_API_TOKEN is not set")
         scheme, _, token = authorization.partition(" ")
+        # Surrounding whitespace is ignored: pasted secrets often carry a stray space or newline.
         if scheme.lower() == "bearer" and secrets.compare_digest(
-            token.encode(), expected.get_secret_value().encode()
+            token.strip().encode(), expected.get_secret_value().strip().encode()
         ):
             return Principal("token")
         raise ApiError(401, "unauthorized", "missing or invalid bearer token")

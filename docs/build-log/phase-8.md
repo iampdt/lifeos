@@ -28,12 +28,38 @@ Date: 2026-11-02.
 | Smoke test against the containers (production mode, sandbox workspace, a plain `postgresql://` URL) | All checks pass: auth required, database ready, model configured, API docs hidden, every Notion schema matches, the web app serves and proxies `/api`, chat streams through the standalone Next.js server (`run` 0.0 s, `tool` 1.9 s, answer 3.9 s) |
 | The cron workflow's shell step, run against the containers | Signature accepted; `expire_proposals` done; `morning_briefing` started a run; the repeat returned `already_ran`; a wrong secret got 401 |
 
+## Production deployment (2026-11-02)
+
+Neon (Singapore, Postgres 16), Render (free Docker service, Singapore) and Vercel, set up as in
+[deployment.md](../deployment.md). The API starts in production mode against the live workspace
+with writes off.
+
+| Check (`scripts/smoke_test.py --chat`) | Result |
+| --- | --- |
+| API reachable, auth required, API docs hidden | ok |
+| Database ready, model configured | ok |
+| Notion schemas (tasks, goals, habits, weeks, months, books) | all match |
+| Tasks readable from the live workspace | ok |
+| Web app serves and proxies `/api` to the API | ok |
+| Chat streams through Vercel's rewrite | ok: `run` 0.2 s, `tool` 1.5 s, answer 2.8 s |
+
+Issues found on the way:
+
+1. The first Render build failed: with `rootDir: backend`, the Dockerfile path and build context
+   are resolved inside `backend/`, so `./backend` pointed at `backend/backend`. Fixed in
+   `render.yaml`.
+2. Vercel detects the backend and the frontend and offers to group them; only the frontend is
+   imported, as a single project.
+3. The smoke test crashed when the bearer token was wrong instead of reporting it; it now stops
+   with a clear message, and the API ignores whitespace around configured secrets.
+
 ## Decisions
 
-I16–I21 in [decisions.md](../decisions.md): HMAC scheme, per-day idempotency, migrations at
-start, database URL forms, production mode, deploys gated on CI.
+I16–I23 in [decisions.md](../decisions.md): HMAC scheme, per-day idempotency, migrations at
+start, database URL forms, production mode, deploys gated on CI, streaming through Vercel,
+whitespace in pasted secrets.
 
 ## Next
 
-The first cloud deployment follows [deployment.md](../deployment.md); the smoke test's `--chat`
-check confirms streaming through Vercel's rewrite. After that: Phase 5.
+Scheduled jobs go live once the cron secret is in GitHub; then writes are switched on.
+After that: Phase 5.

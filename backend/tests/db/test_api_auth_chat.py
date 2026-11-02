@@ -213,3 +213,11 @@ async def test_settings_and_notion_status(env):
     by_name = {s["name"]: s for s in status["data_sources"]}
     assert by_name["tasks"]["ok"] is True and by_name["tasks"]["drift"] == []
     assert by_name["books"]["reachable"] is False
+
+
+async def test_configured_secrets_ignore_surrounding_whitespace(env):
+    env.app.state.services.settings = Settings(_env_file=None, lifeos_api_token=" tok-123\n")
+    ok = await env.client.get("/api/v1/tasks", headers={"Authorization": "Bearer tok-123"})
+    assert ok.status_code == 200
+    wrong = await env.client.get("/api/v1/tasks", headers={"Authorization": "Bearer tok-124"})
+    assert wrong.status_code == 401

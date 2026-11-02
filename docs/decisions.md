@@ -69,8 +69,5 @@ replaced. Dates are when the decision was made.
 | I19 | Database URL | Accepts a standard libpq URL (as Neon provides it) or an asyncpg URL; the app derives the asyncpg form for SQLAlchemy and the libpq form for the LangGraph checkpointer |
 | I20 | Production mode | `LIFEOS_ENV=production` hides the OpenAPI schema and docs and always uses Secure cookies |
 | I21 | Deploys | Render deploys only after CI passes (`autoDeployTrigger: checksPass`); the API starts with writes off until the smoke test passes |
-
-## Open questions
-
-- Does streaming chat pass through Vercel's rewrite without buffering? It does through the
-  Next.js server; `scripts/smoke_test.py --chat` checks it on the deployed app.
+| I22 | Streaming through Vercel | Verified on 2026-11-02: with `Cache-Control: no-transform`, chat events pass through Vercel's external rewrite as they happen (first event at 0.2 s, answer at 2.8 s) |
+| I23 | Pasted secrets | The API ignores whitespace around the configured bearer token and cron secret, since values pasted into dashboards often carry a stray space or newline |

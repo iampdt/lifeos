@@ -49,7 +49,7 @@ def main() -> int:
     parser.add_argument("--app", help="web app base URL, e.g. https://lifeos.vercel.app")
     parser.add_argument("--chat", action="store_true", help="also stream one chat answer via --app")
     args = parser.parse_args()
-    token = os.environ.get("LIFEOS_API_TOKEN")
+    token = os.environ.get("LIFEOS_API_TOKEN", "").strip().strip("<>").strip()
     if not token:
         raise SystemExit("set LIFEOS_API_TOKEN")
     auth = {"Authorization": f"Bearer {token}"}
@@ -61,6 +61,10 @@ def main() -> int:
     with httpx.Client(timeout=60) as client:
         smoke.check("auth required", client.get(f"{api}/tasks").status_code == 401)
         ready = client.get(f"{api}/health/ready", headers=auth)
+        if ready.status_code == 401:
+            smoke.check("bearer token accepted", False, "copy LIFEOS_API_TOKEN again from Render "
+                        "→ lifeos-api → Environment (reveal it, then copy)")  # fmt: skip
+            return 1
         smoke.check("database ready", ready.status_code == 200, ready.text[:120])
         settings = client.get(f"{api}/settings", headers=auth).json()
         smoke.check("LLM configured", settings["llm"]["configured"])

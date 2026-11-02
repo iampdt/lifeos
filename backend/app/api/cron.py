@@ -55,7 +55,7 @@ async def run_job(
     except ValueError:
         skew = float("inf")
     body = await request.body()
-    expected = sign(secret.get_secret_value(), x_lifeos_timestamp, job, body)
+    expected = sign(secret.get_secret_value().strip(), x_lifeos_timestamp, job, body)
     if skew > MAX_SKEW_SECONDS or not hmac.compare_digest(expected, x_lifeos_signature):
         raise ApiError(401, "bad_signature", "missing, stale or invalid cron signature")
     if job not in JOBS:

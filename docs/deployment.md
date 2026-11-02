@@ -26,7 +26,8 @@ GitHub Actions ── signed POST /api/v1/internal/cron/{job} ──► Render
 ### 2. API (Render)
 
 1. New → **Blueprint**, pick this repository. Render reads `render.yaml` and creates
-   `lifeos-api` (Docker, free, Singapore, health check `/api/v1/health`).
+   `lifeos-api` (Docker, free, Singapore, health check `/api/v1/health`). Render appends a
+   suffix when the name is taken, so the URL may look like `https://lifeos-api-xxxx.onrender.com`.
 2. Enter the values it asks for: `DATABASE_URL` (from Neon), `NOTION_TOKEN`, `GEMINI_API_KEY`
    and the `NOTION_DS_*` data-source IDs.
 3. `LIFEOS_API_TOKEN` and `LIFEOS_CRON_SECRET` are generated. Copy both from the service's
@@ -47,10 +48,14 @@ DATABASE_URL='<Neon connection string>' .venv/bin/python -m scripts.create_owner
 
 ### 4. Web app (Vercel)
 
-1. Import the repository; set **Root Directory** to `frontend` (framework: Next.js).
+1. Import the repository. Vercel detects two applications (the FastAPI backend and the Next.js
+   frontend) and offers to group them; choose **Import single project** for `frontend` only,
+   since the API runs on Render. Root Directory becomes `frontend`, framework Next.js.
 2. Add the environment variable `LIFEOS_BACKEND_URL` = the Render URL
-   (`https://lifeos-api.onrender.com`). It is read at build time, so redeploy after changing it.
-3. Deploy, then sign in at the Vercel URL.
+   (for example `https://lifeos-api-xxxx.onrender.com`). It is read at build time, so redeploy
+   after changing it.
+3. Deploy, then sign in at the Vercel URL. If the first deployment didn't start (Vercel may ask
+   to re-authenticate), use Deployments → ⋯ → **Create Deployment** with branch `main`.
 
 ### 5. Scheduled jobs (GitHub)
 
@@ -68,8 +73,9 @@ check the signature. Without these secrets, scheduled runs are skipped with a no
 
 ```bash
 cd backend
-LIFEOS_API_TOKEN='<from Render>' .venv/bin/python -m scripts.smoke_test \
-  --api https://lifeos-api.onrender.com --app https://<your-app>.vercel.app --chat
+read -rs LIFEOS_API_TOKEN && export LIFEOS_API_TOKEN   # paste the token; it isn't echoed
+.venv/bin/python -m scripts.smoke_test \
+  --api https://lifeos-api-xxxx.onrender.com --app https://<your-app>.vercel.app --chat
 ```
 
 It waits for a sleeping instance, then checks auth, the database, the model, that the API docs
@@ -92,6 +98,13 @@ written to Notion from then on.
 | Change the password | `create_owner EMAIL --reset` against the production `DATABASE_URL`; signs out every session |
 | Stop all writes | Set `LIFEOS_WRITES_ENABLED=false` |
 | Change models | `LLM_FAST_MODELS` / `LLM_SMART_MODELS` on Render |
+
+## Notes from the first deployment
+
+- With `rootDir` set in `render.yaml`, Render resolves `dockerfilePath` and `dockerContext`
+  relative to that directory, not the repository root.
+- A Blueprint deploys from `main` as soon as it syncs; later commits deploy after CI passes.
+- Commits that change only files outside `backend/` don't rebuild the API.
 
 ## Free-tier behaviour
 

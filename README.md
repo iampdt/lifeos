@@ -83,6 +83,6 @@ render.yaml Render Blueprint for the API
 
 ## Status
 
-The MVP is complete and verified locally: the workflows, chat, approvals and the web app run
-end to end against a sandbox copy of the workspace, in containers, with CI. Next: the first
-cloud deployment, then the monthly career review and memory ([roadmap](docs/roadmap.md)).
+The MVP is deployed (Vercel, Render and Neon free tiers) and passes its production smoke test,
+including streamed chat through the web app's proxy. Next: the monthly career review and memory
+([roadmap](docs/roadmap.md)).
