@@ -83,6 +83,7 @@ render.yaml Render Blueprint for the API
 | [Development](docs/development.md) | Setup, configuration, tests, scripts, conventions |
 | [Deployment](docs/deployment.md) | Free-tier deployment and operations |
 | [Evaluation](docs/evals/README.md) | Accuracy of the model-backed agents per model, including prompt-injection cases |
+| [Multi-user design](docs/multi-user.md) | Phase 9: Google and Notion sign-in, generic workspaces, free-tier AI for many users |
 | [Roadmap](docs/roadmap.md) | Phases and status |
 | [Build log](docs/build-log/) | What each phase built and how it was verified |
 

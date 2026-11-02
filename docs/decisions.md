@@ -31,6 +31,7 @@ replaced. Dates are when the decision was made.
 | P8 | New habit row titles | `dd/mm/yyyy`; legacy `d/m/yy` titles are still recognised |
 | P9 | Sending workspace data to a free-tier LLM | Acceptable |
 | P10 | Testing writes | Only against a sandbox copy of the databases, never the real workspace |
+| P11–P14 | Multi-user (2026-11-02) | Google-only sign-in, Notion OAuth, a generic workspace model, free-tier AI with a shared allowance plus users' own keys. See [multi-user.md](multi-user.md) |
 
 ## Implementation
 
