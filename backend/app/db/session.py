@@ -41,6 +41,11 @@ def libpq_url(raw: str) -> str:
     return url.set(query=query).render_as_string(hide_password=False)
 
 
+def with_database(raw: str, database: str) -> str:
+    """The same server, credentials and options, with a different database name."""
+    return make_url(raw).set(database=database).render_as_string(hide_password=False)
+
+
 def make_engine(database_url: str) -> AsyncEngine:
     # Small pool: one owner, and the free Postgres tier limits connections. pool_pre_ping
     # replaces connections dropped while a scale-to-zero database was suspended.

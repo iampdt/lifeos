@@ -80,3 +80,5 @@ replaced. Dates are when the decision was made.
 | I25 | Model chain | Confirmed by the evaluation: `gemini-3.5-flash-lite` first (all cases passed, fastest), `gemini-3.1-flash-lite` as fallback |
 | I26 | Public demo | The real application on an in-memory Notion seeded relative to today, rather than screenshots or a mocked frontend, so every feature works and is verified the same way |
 | I27 | Demo isolation | One shared workspace with a visible reset and a rebuild on every start, instead of per-visitor workspaces; demo mode refuses any database not named for the demo, because it resets it |
+| I28 | Demo secrets | The demo copies the main service's database URL and model key through the Blueprint (`fromService`) and swaps the database name (`LIFEOS_DEMO_DATABASE`), so no secret is copied by hand |
+| I29 | Injection found by the evaluation | `gemini-3.1-flash-lite` reported every habit as done because a book title claimed so. The check-in prompt now states that facts come only from the owner's message, never from titles; both production models then passed every case |

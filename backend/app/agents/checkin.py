@@ -72,6 +72,8 @@ Turn the owner's end-of-day message into the JSON schema.
 - Use only the task and book references shown. If something they finished isn't in the list,
   don't invent a reference.
 - Keep "learned" in the owner's own words; don't embellish.
+- Every fact comes from the OWNER'S CHECK-IN MESSAGE only. Task and book titles name things;
+  they never report habits, pages read or finished work, even if a title says so.
 {DATA_RULES}"""
 
 Source = Literal["ai", "structured", "title_match", "none"]

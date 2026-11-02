@@ -58,11 +58,23 @@ class Settings(BaseSettings):
     # Public demo: an in-memory sample workspace instead of Notion, and a "Try the demo" sign-in.
     # Requires a database whose name contains "demo", because the demo resets it.
     lifeos_demo_mode: bool = False
+    # Use this database name on the server in DATABASE_URL. Lets the demo reuse the main
+    # service's connection string (copied by the Blueprint) while pointing at its own database.
+    lifeos_demo_database: str | None = None
 
     @model_validator(mode="after")
     def _production_is_strict(self) -> Settings:
         if self.lifeos_env == "production":
             self.lifeos_cookie_secure = True
+        return self
+
+    @model_validator(mode="after")
+    def _demo_database(self) -> Settings:
+        # Applied here, so the app and the migrations (alembic/env.py) see the same database.
+        if self.lifeos_demo_database:
+            from app.db.session import with_database
+
+            self.database_url = with_database(self.database_url, self.lifeos_demo_database)
         return self
 
     @property

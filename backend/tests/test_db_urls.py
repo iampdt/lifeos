@@ -1,3 +1,5 @@
+from sqlalchemy.engine import make_url
+
 from app.core.config import Settings
 from app.db.session import async_url, libpq_url
 
@@ -32,3 +34,14 @@ def test_local_urls_pass_through():
 def test_production_forces_secure_cookies():
     settings = Settings(_env_file=None, lifeos_env="production", lifeos_cookie_secure=False)
     assert settings.production and settings.lifeos_cookie_secure
+
+
+def test_demo_database_replaces_only_the_database_name():
+    settings = Settings(_env_file=None, database_url=NEON, lifeos_demo_database="lifeos_demo")
+    demo, original = make_url(settings.database_url), make_url(NEON)
+    assert demo.database == "lifeos_demo"
+    assert (demo.host, demo.username, demo.password, dict(demo.query)) == (
+        original.host, original.username, original.password, dict(original.query),
+    )  # fmt: skip
+    assert make_url(settings.checkpoint_url).database == "lifeos_demo"
+    assert Settings(_env_file=None, database_url=NEON).database_url == NEON

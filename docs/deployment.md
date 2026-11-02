@@ -99,8 +99,10 @@ in-memory sample workspace and no Notion connection (see architecture §13).
    database). Demo mode resets its database on every start and refuses to run against a
    database whose name doesn't contain `demo`.
 2. **API.** Sync the Blueprint (Blueprints → `lifeos` → Manual sync). Render creates
-   `lifeos-demo-api` and asks for `DATABASE_URL` (the `lifeos_demo` connection string, pooling
-   off) and `GEMINI_API_KEY`. A separate key keeps visitors' usage away from your own quota.
+   `lifeos-demo-api`, copies `DATABASE_URL` and `GEMINI_API_KEY` from `lifeos-api`
+   (`fromService`), and `LIFEOS_DEMO_DATABASE=lifeos_demo` points the copied URL at the demo
+   database. The demo shares the Gemini quota with the main service; to separate them, set its
+   own `GEMINI_API_KEY` in the dashboard and drop the `fromService` entry.
 3. **Web app.** Import the repository into Vercel again as a second project (for example
    `lifeos-demo`, root directory `frontend`) with `LIFEOS_BACKEND_URL` = the demo API's URL.
 4. **Check.** Open the demo URL: the sign-in page shows **Try the demo** instead of the password

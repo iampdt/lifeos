@@ -48,7 +48,7 @@ services:
         generateValue: true
 
   # Public demo: the same image on an in-memory sample workspace (no Notion). It resets its
-  # database on start, so DATABASE_URL must point at a database whose name contains "demo".
+  # database on start, so it refuses any database whose name doesn't contain "demo".
   - type: web
     name: lifeos-demo-api
     runtime: docker
@@ -69,7 +69,17 @@ services:
       # A smaller daily budget: anyone on the internet can use the demo's chat.
       - key: LLM_DAILY_TOKEN_BUDGET
         value: "150000"
+      # Reuse the main service's secrets without anyone copying them; LIFEOS_DEMO_DATABASE swaps
+      # the database name in the copied URL, so the demo only ever touches lifeos_demo.
+      - key: LIFEOS_DEMO_DATABASE
+        value: lifeos_demo
       - key: DATABASE_URL
-        sync: false
+        fromService:
+          type: web
+          name: lifeos-api
+          envVarKey: DATABASE_URL
       - key: GEMINI_API_KEY
-        sync: false
+        fromService:
+          type: web
+          name: lifeos-api
+          envVarKey: GEMINI_API_KEY
