@@ -46,6 +46,10 @@ services:
         generateValue: true
       - key: LIFEOS_CRON_SECRET
         generateValue: true
+      # Google sign-in turns on once GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are also set in the
+      # dashboard (see docs/deployment.md); until then the password form stays.
+      - key: LIFEOS_PUBLIC_URL
+        value: https://lifeos-five-tau.vercel.app
 
   # Public demo: the same image on an in-memory sample workspace (no Notion). It resets its
   # database on start, so it refuses any database whose name doesn't contain "demo".

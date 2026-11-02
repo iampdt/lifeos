@@ -8,7 +8,7 @@ tasks, with nothing in the code that only makes sense for one person's setup.
 
 | # | Topic | Decision |
 | --- | --- | --- |
-| P11 | Sign-in | Google only (OpenID Connect, scopes `openid email profile`). Password sign-in is removed; the demo keeps its one-click session |
+| P11 | Sign-in | Google only (OpenID Connect, scopes `openid email profile`). Passwords remain only where Google isn't configured (local development); the demo keeps its one-click session |
 | P12 | Notion access | A public Notion integration with OAuth. New users can duplicate a LifeOS template during authorisation; existing setups are mapped instead |
 | P13 | Workspace model | Generic: modules (tasks, habits, reviews, goals, reading) mapped to whatever databases and properties a user has. Habit names, status names, review cadence and limits are data, not code |
 | P14 | AI | Free tier only. Every user gets a small daily allowance on the service's key and can add their own free Gemini key for full use; without either, features run in rule-based mode |
@@ -29,14 +29,17 @@ tasks, with nothing in the code that only makes sense for one person's setup.
 
 ## Accounts
 
-1. `GET /auth/google/start` creates a short-lived sign-in attempt (state, nonce, PKCE verifier)
-   and redirects to Google.
+1. `GET /auth/google/start` creates a single-use sign-in attempt (state, nonce, PKCE verifier)
+   that expires after 10 minutes, and redirects to Google.
 2. Google redirects to `/api/v1/auth/google/callback` on the web app's domain (proxied to the API,
    so the session cookie stays first-party). The API checks the state, exchanges the code, and
    verifies the ID token: signature against Google's published keys, issuer, audience, expiry,
    nonce, and a verified email.
-3. The account is found by Google's stable subject ID, or created; the existing owner account is
-   linked by email on first sign-in. A normal session (HttpOnly cookie, CSRF token) follows.
+3. The account is found by Google's stable subject ID. An existing account with the same email
+   and no Google link yet is linked on first sign-in, which is how the owner account moves over.
+   Otherwise a new account is created, but only while `LIFEOS_OPEN_SIGNUP` is on; it stays off
+   until per-user data isolation (9.2) is in place. A normal session (HttpOnly cookie, CSRF
+   token) follows.
 4. **Delete account** removes the user's tokens, settings, runs, proposals and sessions. Notion
    content is never touched.
 
@@ -105,12 +108,12 @@ whose local time has reached a scheduled routine that hasn't run today, the API 
 
 ## Delivery
 
-| Step | Scope |
-| --- | --- |
-| 9.1 | Google sign-in, account linking, delete account; password sign-in removed |
-| 9.2 | Multi-tenancy: `user_id` everywhere, per-request dependencies, isolation tests |
-| 9.3 | Notion OAuth connect, encrypted tokens with refresh, disconnect |
-| 9.4 | Generic workspace model: modules, mappings, onboarding UI, template, generic habits, per-user rules |
-| 9.5 | AI allowance, own-key option, disclosure and consent |
-| 9.6 | Per-user scheduling |
-| 9.7 | Privacy and terms pages, Notion review submission, the owner's migration to the new flow, rollout |
+| Step | Scope | Status |
+| --- | --- | --- |
+| 9.1 | Google sign-in and account linking; passwords only where Google isn't configured | Done |
+| 9.2 | Multi-tenancy: `user_id` everywhere, per-request dependencies, isolation tests, delete account | |
+| 9.3 | Notion OAuth connect, encrypted tokens with refresh, disconnect | |
+| 9.4 | Generic workspace model: modules, mappings, onboarding UI, template, generic habits, per-user rules | |
+| 9.5 | AI allowance, own-key option, disclosure and consent | |
+| 9.6 | Per-user scheduling | |
+| 9.7 | Privacy and terms pages, Notion review submission, the owner's migration to the new flow, rollout | |

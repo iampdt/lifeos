@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import asdict
@@ -11,15 +12,17 @@ from datetime import timedelta
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 
 from app.agents.chat import ChatAgent
 from app.api.errors import ApiError
 from app.api.security import Principal, require_owner, services
+from app.auth.accounts import account_for_google
+from app.auth.google import GoogleSignInError, new_pkce
 from app.auth.sessions import SESSION_COOKIE, SessionService
-from app.db.models import ActionProposal, AgentRun
+from app.db.models import ActionProposal, AgentRun, OAuthState
 from app.demo.setup import demo_user, reset_demo
 from app.notion.errors import NotionError
 from app.notion.schema import check_data_source
@@ -75,7 +78,70 @@ async def health() -> dict[str, str]:
 @router.get("/meta")
 async def meta(request: Request) -> dict[str, Any]:
     """Public facts the sign-in page needs before anyone is signed in."""
-    return {"demo": services(request).settings.lifeos_demo_mode}
+    settings = services(request).settings
+    return {
+        "demo": settings.lifeos_demo_mode,
+        "google": settings.google_sign_in,
+        "password": settings.password_sign_in,
+    }
+
+
+OAUTH_STATE_TTL = timedelta(minutes=10)
+
+
+@router.get("/auth/google/start")
+async def google_start(request: Request) -> RedirectResponse:
+    svc = services(request)
+    if svc.google is None:
+        raise ApiError(404, "http_error", "Not Found")
+    if not svc.oauth_limiter.allow("google"):
+        raise ApiError(429, "rate_limited", "too many sign-in attempts; wait a minute", True)
+    verifier, challenge = new_pkce()
+    state, nonce = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+    now = svc.deps.clock()
+    async with svc.deps.session_factory() as db, db.begin():
+        await db.execute(delete(OAuthState).where(OAuthState.expires_at < now))
+        db.add(OAuthState(state=state, provider="google", code_verifier=verifier, nonce=nonce,
+                          expires_at=now + OAUTH_STATE_TTL))  # fmt: skip
+    url = svc.google.authorization_url(state=state, nonce=nonce, code_challenge=challenge)
+    return RedirectResponse(url, status_code=302)
+
+
+@router.get("/auth/google/callback")
+async def google_callback(
+    request: Request, code: str = "", state: str = "", error: str = ""
+) -> RedirectResponse:
+    """Google redirects here (through the web app's /api proxy). Success lands on the app;
+    any failure goes back to the sign-in page with a short error code."""
+    svc = services(request)
+    if svc.google is None:
+        raise ApiError(404, "http_error", "Not Found")
+    try:
+        if error or not code or not state:
+            raise GoogleSignInError("cancelled", error or "missing code or state")
+        async with svc.deps.session_factory() as db, db.begin():
+            attempt = await db.get(OAuthState, state, with_for_update=True)
+            if attempt is not None:
+                await db.delete(attempt)  # single use, whatever happens next
+        if (
+            attempt is None
+            or attempt.provider != "google"
+            or attempt.expires_at <= svc.deps.clock()
+        ):
+            raise GoogleSignInError("expired", "the sign-in attempt expired; try again")
+        id_token = await svc.google.exchange(code, attempt.code_verifier)
+        identity = await svc.google.verify(id_token, nonce=attempt.nonce)
+        ttl = timedelta(days=svc.settings.lifeos_session_days)
+        async with svc.deps.session_factory() as db, db.begin():
+            user = await account_for_google(
+                db, identity, open_signup=svc.settings.lifeos_open_signup
+            )
+            token, _ = await SessionService(db, ttl=ttl, clock=svc.deps.clock).start(user)
+    except GoogleSignInError as exc:
+        return RedirectResponse(f"/login?error={exc.code}", status_code=302)
+    response = RedirectResponse("/", status_code=302)
+    _set_session_cookie(response, svc, token, ttl)
+    return response
 
 
 @router.post("/auth/demo")
@@ -109,6 +175,8 @@ def _set_session_cookie(response: Response, svc, token: str, ttl: timedelta) -> 
 @router.post("/auth/login")
 async def login(body: LoginBody, request: Request, response: Response) -> dict[str, Any]:
     svc = services(request)
+    if not svc.settings.password_sign_in:
+        raise ApiError(403, "password_sign_in_disabled", "sign in with Google instead")
     if not svc.login_limiter.allow("login"):
         raise ApiError(429, "rate_limited", "too many sign-in attempts; wait a minute", True)
     ttl = timedelta(days=svc.settings.lifeos_session_days)

@@ -45,6 +45,11 @@ export DATABASE_URL=postgresql+asyncpg://lifeos:lifeos@localhost:5433/lifeos_dem
 LIFEOS_DEMO_MODE=true LIFEOS_COOKIE_SECURE=false .venv/bin/uvicorn app.api.main:app --port 8000
 ```
 
+Sign-in uses the password form unless Google is configured. To try Google sign-in locally, create
+an OAuth client whose redirect URI is `http://localhost:3000/api/v1/auth/google/callback` and set
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `LIFEOS_PUBLIC_URL=http://localhost:3000`. Your
+account is linked on first sign-in when its email matches your Google account.
+
 ## Configuration
 
 All settings come from environment variables, read from the repo-root `.env` in development.
@@ -55,6 +60,8 @@ All settings come from environment variables, read from the repo-root `.env` in 
 | `NOTION_PROFILE` | `live` uses the real workspace; `sandbox` uses the `NOTION_SANDBOX_*` copies |
 | `LIFEOS_WRITES_ENABLED` | Off by default. When off, approvals are recorded but nothing is written |
 | `LIFEOS_ENV` | `production` hides the API docs and forces Secure cookies |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `LIFEOS_PUBLIC_URL` | All three set: Google sign-in only; otherwise the password form |
+| `LIFEOS_OPEN_SIGNUP` | Off by default. When on, new Google users get an account |
 
 ## Tests
 

@@ -56,7 +56,7 @@ class SessionService:
         return token, session, user
 
     async def start(self, user: User) -> tuple[str, Session]:
-        """A new session for an already-authenticated user (password sign-in, or the demo)."""
+        """A new session for an already-authenticated user (password, Google, or the demo)."""
         token = secrets.token_urlsafe(32)
         session = Session(
             user_id=user.id,

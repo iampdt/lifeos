@@ -13,3 +13,5 @@ psycopg[binary]>=3.3,<4
 fastapi>=0.162,<1
 uvicorn[standard]>=0.54,<1
 argon2-cffi>=25.1,<26
+pyjwt[crypto]>=2.15,<3
+cryptography>=45,<52

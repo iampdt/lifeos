@@ -38,7 +38,11 @@ async def client(session_factory):
 
 async def test_visitors_get_a_session_without_a_password(client):
     c, _ = client
-    assert (await c.get("/api/v1/meta")).json() == {"demo": True}
+    assert (await c.get("/api/v1/meta")).json() == {
+        "demo": True,
+        "google": False,
+        "password": False,
+    }
     assert (await c.get("/api/v1/tasks")).status_code == 401
     session = await c.post("/api/v1/auth/demo")
     assert session.status_code == 200 and session.json()["email"] == "demo@example.com"
@@ -85,5 +89,5 @@ async def test_demo_endpoints_do_not_exist_outside_demo_mode(session_factory):
     app, _ = await demo_app(session_factory, demo=False)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                  base_url="https://t") as c:  # fmt: skip
-        assert (await c.get("/api/v1/meta")).json() == {"demo": False}
+        assert (await c.get("/api/v1/meta")).json()["demo"] is False
         assert (await c.post("/api/v1/auth/demo")).status_code == 404

@@ -39,10 +39,12 @@ Every error has the same shape:
 | Method and path | Description |
 | --- | --- |
 | `GET /health` | Liveness, public |
-| `GET /meta` | Public: `{demo}`, so the sign-in page knows which form to show |
+| `GET /meta` | Public: `{demo, google, password}`, so the sign-in page knows which sign-in to offer |
 | `POST /auth/demo` | Demo deployments only (404 otherwise): a session on the shared demo account, no password. Returns `{email, csrf_token}` |
 | `GET /health/ready` | Database check; also returns the Notion profile, write switch and whether a model is configured |
-| `POST /auth/login` | Body `{email, password}`. Returns `{email, csrf_token}` and sets the cookie |
+| `GET /auth/google/start` | Starts Google sign-in: records a single-use attempt (state, nonce, PKCE verifier; 10 minutes) and redirects to Google. 404 when Google isn't configured |
+| `GET /auth/google/callback` | Google's redirect target. On success sets the cookie and redirects to `/`; otherwise redirects to `/login?error=<code>`: `cancelled`, `expired`, `exchange_failed`, `invalid_token`, `email_unverified`, `signup_closed`, `account_conflict` |
+| `POST /auth/login` | Body `{email, password}`. Returns `{email, csrf_token}` and sets the cookie. Refused with 403 `password_sign_in_disabled` when Google sign-in is configured |
 | `GET /auth/me` | `{via, email, csrf_token}` |
 | `POST /auth/logout` | Revokes the session and clears the cookie |
 

@@ -48,6 +48,15 @@ class Settings(BaseSettings):
     # Bearer token for the API until session auth arrives with the frontend (Phase 6).
     # Unset means every API route refuses requests (fail closed).
     lifeos_api_token: SecretStr | None = None
+    # Sign in with Google (OpenID Connect). LIFEOS_PUBLIC_URL is the web app's origin; Google
+    # redirects to {LIFEOS_PUBLIC_URL}/api/v1/auth/google/callback.
+    google_client_id: str | None = None
+    google_client_secret: SecretStr | None = None
+    lifeos_public_url: str | None = None
+    # New accounts from Google sign-in. Off until data is separated per user (multi-user 9.2);
+    # while off, Google sign-in only links to accounts that already exist (matched by email).
+    lifeos_open_signup: bool = False
+
     # Owner login (Phase 6). Secure cookies need HTTPS; set false only for local http dev.
     lifeos_cookie_secure: bool = True
     lifeos_session_days: int = 14
@@ -80,6 +89,15 @@ class Settings(BaseSettings):
     @property
     def production(self) -> bool:
         return self.lifeos_env == "production"
+
+    @property
+    def google_sign_in(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret and self.lifeos_public_url)
+
+    @property
+    def password_sign_in(self) -> bool:
+        """Passwords are a fallback for deployments without Google sign-in (local development)."""
+        return not self.google_sign_in and not self.lifeos_demo_mode
 
     def model_chain(self, tier: str) -> list[str]:
         raw = self.llm_smart_models if tier == "smart" else self.llm_fast_models

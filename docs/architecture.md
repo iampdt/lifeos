@@ -43,7 +43,7 @@ cookie is first-party. Scheduled jobs call the backend directly with a signed re
 | Package | Responsibility |
 | --- | --- |
 | `api/` | FastAPI app and routes, request guard (session + CSRF, or bearer token), signed cron endpoint, error shape |
-| `auth/` | argon2id passwords, server-side sessions, login rate limiter |
+| `auth/` | Google sign-in (OpenID Connect), account linking, argon2id passwords, server-side sessions, login rate limiter |
 | `workflows/` | LangGraph graphs (`evening.py`, `morning.py`, `weekly.py`), the run manager, the two-phase proposal builder |
 | `agents/` | Specialists: `planner`, `checkin`, `reviewer`, `chat`. Each is a prompt, an output schema and validation |
 | `execution/` | Action kinds and payloads, proposal lifecycle, executor, audit log |
@@ -282,7 +282,9 @@ Productivity records stay in Notion. Postgres holds only state LifeOS owns. Migr
   every variable.
 - **Notion:** an internal integration connected only to the Life OS pages (read, update and
   insert content; no user or comment access).
-- **Authentication:** argon2id passwords; the session cookie is `HttpOnly; SameSite=Lax` and
+- **Authentication:** Google sign-in (authorisation code with PKCE, state and nonce; the ID token
+  is verified against Google's keys) where configured, otherwise argon2id passwords; the session
+  cookie is `HttpOnly; SameSite=Lax` and
   `Secure` in production; only a SHA-256 of the token is stored; logout and password resets
   revoke sessions; sign-in is limited to 5 attempts a minute.
 - **CSRF:** every request that changes state must send the session's `X-CSRF-Token`.

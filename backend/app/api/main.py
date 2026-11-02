@@ -21,6 +21,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.cron import router as cron_router
 from app.api.errors import ApiError, error_body
 from app.api.routes import router
+from app.auth.google import GoogleOIDC
 from app.auth.sessions import RateLimiter
 from app.core.config import Settings, env_values, get_settings
 from app.db.session import make_engine, make_session_factory
@@ -44,6 +45,8 @@ class Services:
     # Demo only: how often visitors may open a session or reset the shared workspace.
     demo_limiter: RateLimiter = field(default_factory=lambda: RateLimiter(30, 60))
     reset_limiter: RateLimiter = field(default_factory=lambda: RateLimiter(2, 60))
+    oauth_limiter: RateLimiter = field(default_factory=lambda: RateLimiter(30, 60))
+    google: GoogleOIDC | None = None  # set when Google sign-in is configured
 
 
 async def build_demo_services(settings: Settings, stack: AsyncExitStack) -> Services:
@@ -92,7 +95,18 @@ async def build_services(settings: Settings, stack: AsyncExitStack) -> Services:
         writes_enabled=settings.lifeos_writes_enabled,
         tz=ZoneInfo(settings.timezone),
     )
-    return Services(settings, deps, WorkflowRunner(deps, saver))
+    return Services(settings, deps, WorkflowRunner(deps, saver), google=google_client(settings))
+
+
+def google_client(settings: Settings) -> GoogleOIDC | None:
+    if not settings.google_sign_in:
+        return None
+    assert settings.google_client_id and settings.google_client_secret
+    return GoogleOIDC(
+        settings.google_client_id,
+        settings.google_client_secret.get_secret_value(),
+        f"{settings.lifeos_public_url.rstrip('/')}/api/v1/auth/google/callback",
+    )
 
 
 @asynccontextmanager

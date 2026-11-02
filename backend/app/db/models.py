@@ -114,7 +114,11 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(254), unique=True)
-    password_hash: Mapped[str] = mapped_column(Text)
+    # Google's stable account ID; set on first Google sign-in.
+    google_sub: Mapped[str | None] = mapped_column(String(64), unique=True)
+    name: Mapped[str | None] = mapped_column(String(200))
+    # Only for password sign-in (deployments without Google); null for Google-only accounts.
+    password_hash: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -140,3 +144,18 @@ class CronRun(Base):
     run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agent_runs.id"))
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+
+
+class OAuthState(Base):
+    """One sign-in or connection attempt: the values the provider's callback must match.
+    Single use and short-lived."""
+
+    __tablename__ = "oauth_states"
+
+    state: Mapped[str] = mapped_column(String(64), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(16))  # google | notion
+    code_verifier: Mapped[str] = mapped_column(String(128))
+    nonce: Mapped[str] = mapped_column(String(64))
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

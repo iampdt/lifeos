@@ -90,6 +90,20 @@ the API redeploys after CI passes. Approved changes are written to Notion from t
 switch lives in `render.yaml`, not the dashboard, because a Blueprint sync resets values that the
 file sets.
 
+### 8. Google sign-in (optional)
+
+1. In Google Cloud, create a project, configure the OAuth consent screen (external; scopes
+   `openid`, `email` and `profile` only, so no verification is needed) and publish it.
+2. Create an OAuth client ID of type *Web application* with the authorised redirect URI
+   `https://<your-app>.vercel.app/api/v1/auth/google/callback`. The callback goes through the web
+   app's proxy, so the session cookie stays first-party.
+3. On Render, set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the dashboard, and
+   `LIFEOS_PUBLIC_URL` (the web app's URL) in `render.yaml`.
+
+From the next deploy the sign-in page offers only **Continue with Google**. The existing account
+is linked on first sign-in when the Google account's email matches it; new accounts are refused
+while `LIFEOS_OPEN_SIGNUP` is off.
+
 ## Public demo
 
 The Blueprint also defines `lifeos-demo-api`: the same image with `LIFEOS_DEMO_MODE=true`, an
@@ -116,7 +130,7 @@ in-memory sample workspace and no Notion connection (see architecture §13).
 | Run a job now | Actions → Scheduled jobs → Run workflow |
 | Rotate the bearer token | Change `LIFEOS_API_TOKEN` on Render |
 | Rotate the cron secret | Change `LIFEOS_CRON_SECRET` on Render and in GitHub secrets together |
-| Change the password | `create_owner EMAIL --reset` against the production `DATABASE_URL`; signs out every session |
+| Change the password | `create_owner EMAIL --reset` against the production `DATABASE_URL`; signs out every session (password sign-in only) |
 | Stop all writes | Set `LIFEOS_WRITES_ENABLED` to `"false"` in `render.yaml` and push (or, for an immediate stop, in the dashboard; the next Blueprint sync restores the file's value) |
 | Change models | `LLM_FAST_MODELS` / `LLM_SMART_MODELS` on Render |
 
