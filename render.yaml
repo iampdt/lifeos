@@ -20,9 +20,10 @@ services:
         value: Asia/Kolkata
       - key: NOTION_PROFILE
         value: live
-      # Kill switch: start with writes off, turn on after the smoke test.
+      # Kill switch for Notion writes (every write still needs approval). Kept here rather than in
+      # the dashboard so a Blueprint sync can't silently flip it. Set "false" to stop all writes.
       - key: LIFEOS_WRITES_ENABLED
-        value: "false"
+        value: "true"
       - key: DATABASE_URL
         sync: false
       - key: NOTION_TOKEN

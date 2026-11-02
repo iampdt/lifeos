@@ -63,5 +63,5 @@ whitespace in pasted secrets.
 
 ## Next
 
-Switch writes on (`LIFEOS_WRITES_ENABLED` in `render.yaml`, so a Blueprint sync can't revert it),
-then Phase 5.
+Writes were switched on in production on 2026-11-02 (`LIFEOS_WRITES_ENABLED` in `render.yaml`),
+after the smoke test and a token rotation. Next: Phase 5.

@@ -35,7 +35,8 @@ GitHub Actions ── signed POST /api/v1/internal/cron/{job} ──► Render
 4. The first deploy builds the image and runs the migrations on start. It deploys again
    whenever CI passes on `main`.
 
-Writes start **off** (`LIFEOS_WRITES_ENABLED=false`).
+Writes start **off** (`LIFEOS_WRITES_ENABLED` is `"false"` in `render.yaml` for a first
+deployment).
 
 ### 3. Owner account
 
@@ -84,8 +85,10 @@ the proxy. It doesn't write to Notion.
 
 ### 7. Turn on writes
 
-When the smoke test passes, set `LIFEOS_WRITES_ENABLED=true` on Render. Approved changes are
-written to Notion from then on.
+When the smoke test passes, set `LIFEOS_WRITES_ENABLED` to `"true"` in `render.yaml` and push;
+the API redeploys after CI passes. Approved changes are written to Notion from then on. The
+switch lives in `render.yaml`, not the dashboard, because a Blueprint sync resets values that the
+file sets.
 
 ## Operations
 
@@ -96,7 +99,7 @@ written to Notion from then on.
 | Rotate the bearer token | Change `LIFEOS_API_TOKEN` on Render |
 | Rotate the cron secret | Change `LIFEOS_CRON_SECRET` on Render and in GitHub secrets together |
 | Change the password | `create_owner EMAIL --reset` against the production `DATABASE_URL`; signs out every session |
-| Stop all writes | Set `LIFEOS_WRITES_ENABLED=false` |
+| Stop all writes | Set `LIFEOS_WRITES_ENABLED` to `"false"` in `render.yaml` and push (or, for an immediate stop, in the dashboard; the next Blueprint sync restores the file's value) |
 | Change models | `LLM_FAST_MODELS` / `LLM_SMART_MODELS` on Render |
 
 ## Notes from the first deployment
