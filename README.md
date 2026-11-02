@@ -2,6 +2,10 @@
 
 A chief of staff for a personal productivity system in Notion.
 
+**[Try the live demo →](https://lifeos-demo-rho.vercel.app)** No account needed: it runs the
+real application on a sample workspace. The first visit can take up to a minute while the free
+server wakes up.
+
 LifeOS reads the workspace and runs its daily and weekly routines: an evening check-in that
 turns a free-text reply into updates, a morning briefing, and a Sunday review. It also answers
 questions in a chat. Everything it wants to change becomes a **proposal**. Nothing is written to
@@ -84,6 +88,7 @@ render.yaml Render Blueprint for the API
 
 ## Status
 
-The MVP is deployed (Vercel, Render and Neon free tiers) and passes its production smoke test,
-including streamed chat through the web app's proxy. Next: the monthly career review and memory
-([roadmap](docs/roadmap.md)).
+The MVP runs in production on free tiers (Vercel, Render, Neon) against a real Notion workspace,
+with a public demo on a sample workspace. The model-backed agents are measured by an
+[evaluation set](docs/evals/README.md), including prompt-injection cases. Next: the monthly
+career review and memory ([roadmap](docs/roadmap.md)).

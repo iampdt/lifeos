@@ -26,6 +26,18 @@ A second deployment that anyone can try without a Notion account, for the portfo
 Also cleaned up: example prompts in the chat and check-in now use generic tasks instead of
 workspace-specific ones.
 
-## Next
+## Deployment (2026-11-02)
 
-Deploy it (see [deployment.md](../deployment.md#public-demo)) and link it from the README.
+`lifeos-demo-api` on Render (from the same Blueprint) and a second Vercel project. The demo
+copies the main service's database URL and model key through the Blueprint and points the URL
+at its own `lifeos_demo` database, so no secret was copied by hand.
+
+| Check | Result |
+| --- | --- |
+| `GET /meta` | `{"demo": true}` |
+| API docs | hidden (404) |
+| Demo sign-in | one click, shared demo account |
+| Sample workspace | today's tasks and overdue items dated from the current day; all schemas match |
+| Chat on the live demo | streamed answer listing the two overdue tasks (`run` 0.2 s, answer 2.8 s) |
+| Web app | **Try the demo** → Command Center with the demo banner |
+| Main deployment | unaffected (health ok) |
