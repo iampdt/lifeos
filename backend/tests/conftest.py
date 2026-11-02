@@ -1,4 +1,5 @@
-"""Shared fixtures. Database tests use the `lifeos_test` database from docker-compose."""
+"""Shared fixtures. Database tests use the `lifeos_test` database from docker-compose, which
+starts each test with one account: the owner."""
 
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ from sqlalchemy import text
 
 from app.core.config import BACKEND_ROOT
 from app.db.session import make_engine, make_session_factory
+from tests.workflow_support import OWNER_EMAIL, OWNER_ID
 
 TEST_DATABASE_URL = os.environ.get(
     "LIFEOS_TEST_DATABASE_URL", "postgresql+asyncpg://lifeos:lifeos@localhost:5433/lifeos_test"
@@ -33,6 +35,35 @@ def _reachable(url: str) -> bool:
     return asyncio.run(probe())
 
 
+def _clear_data(url: str) -> None:
+    """Empty every table. Data left by the last run (several accounts' rows, say) doesn't fit
+    older schemas, and the downgrades below should run on an empty database."""
+
+    async def clear() -> None:
+        engine = make_engine(url)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        """
+                        DO $$
+                        DECLARE t text;
+                        BEGIN
+                            FOR t IN SELECT tablename FROM pg_tables
+                                     WHERE schemaname = 'public' AND tablename <> 'alembic_version'
+                            LOOP
+                                EXECUTE format('TRUNCATE %I CASCADE', t);
+                            END LOOP;
+                        END $$;
+                        """
+                    )
+                )
+        finally:
+            await engine.dispose()
+
+    asyncio.run(clear())
+
+
 @pytest.fixture(scope="session")
 def migrated_database() -> str:
     """Rebuild the test schema from the migrations once per test session."""
@@ -41,6 +72,7 @@ def migrated_database() -> str:
     config = Config(str(BACKEND_ROOT / "alembic.ini"))
     config.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
     config.attributes["configure_logger"] = False
+    _clear_data(TEST_DATABASE_URL)
     command.downgrade(config, "base")
     command.upgrade(config, "head")
     return TEST_DATABASE_URL
@@ -57,6 +89,10 @@ async def session_factory(migrated_database):
                 "audit_log, sessions, oauth_states, users "
                 "RESTART IDENTITY CASCADE"
             )
+        )
+        await connection.execute(
+            text("INSERT INTO users (id, email, is_owner) VALUES (:id, :email, true)"),
+            {"id": OWNER_ID, "email": OWNER_EMAIL},
         )
     yield make_session_factory(engine)
     await engine.dispose()

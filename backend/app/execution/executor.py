@@ -75,14 +75,17 @@ class Executor:
         client: NotionWriter,
         specs: dict[str, DataSourceSpec],
         *,
+        user_id: uuid.UUID,
         writes_enabled: bool,
         tz: ZoneInfo = DEFAULT_TZ,
         actor: str = "system",
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
+        """Executes one account's approved proposals against that account's workspace."""
         self.session_factory = session_factory
         self.client = client
         self.specs = specs
+        self.user_id = user_id
         self.writes_enabled = writes_enabled
         self.tz = tz
         self.actor = actor
@@ -94,7 +97,9 @@ class Executor:
         self, proposal_ids: Sequence[uuid.UUID] | None = None
     ) -> list[ExecutionResult]:
         async with self.session_factory() as session:
-            query = select(ActionProposal).where(ActionProposal.status == "approved")
+            query = select(ActionProposal).where(
+                ActionProposal.user_id == self.user_id, ActionProposal.status == "approved"
+            )
             if proposal_ids is not None:
                 query = query.where(ActionProposal.id.in_(list(proposal_ids)))
             approved = list(await session.scalars(query.order_by(ActionProposal.created_at)))
@@ -139,7 +144,9 @@ class Executor:
 
         async with self.session_factory() as session, session.begin():
             proposal = await session.scalar(
-                select(ActionProposal).where(ActionProposal.id == proposal_id).with_for_update()
+                select(ActionProposal)
+                .where(ActionProposal.id == proposal_id, ActionProposal.user_id == self.user_id)
+                .with_for_update()
             )
             if proposal is None or proposal.status != "approved":
                 status = proposal.status if proposal else "missing"
@@ -149,7 +156,7 @@ class Executor:
                 # days later against pages that may have moved on.
                 proposal.status = "expired"
                 audit(session, actor=self.actor, event="proposal.expired",
-                      entity_type="proposal", entity_id=str(proposal_id),
+                      user_id=self.user_id, entity_type="proposal", entity_id=str(proposal_id),
                       details={"reason": "approved but not executed before expiry"})  # fmt: skip
                 return ExecutionResult(proposal_id, "skipped", detail="approval expired")
             resolved, blocker = await self._resolve_dependencies(session, proposal)
@@ -207,6 +214,7 @@ class Executor:
                 session,
                 actor=self.actor,
                 event=f"execution.{outcome}",
+                user_id=self.user_id,
                 entity_type="proposal",
                 entity_id=str(proposal_id),
                 details={
@@ -225,7 +233,10 @@ class Executor:
             return {}, None
         deps = list(
             await session.scalars(
-                select(ActionProposal).where(ActionProposal.id.in_(proposal.depends_on))
+                select(ActionProposal).where(
+                    ActionProposal.id.in_(proposal.depends_on),
+                    ActionProposal.user_id == self.user_id,
+                )
             )
         )
         if len(deps) != len(set(proposal.depends_on)):

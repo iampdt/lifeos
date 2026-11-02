@@ -83,3 +83,13 @@ replaced. Dates are when the decision was made.
 | I27 | Demo isolation | One shared workspace with a visible reset and a rebuild on every start, instead of per-visitor workspaces; demo mode refuses any database not named for the demo, because it resets it |
 | I28 | Demo secrets | The demo copies the main service's database URL and model key through the Blueprint (`fromService`) and swaps the database name (`LIFEOS_DEMO_DATABASE`), so no secret is copied by hand |
 | I29 | Injection found by the evaluation | `gemini-3.1-flash-lite` reported every habit as done because a book title claimed so. The check-in prompt now states that facts come only from the owner's message, never from titles; both production models then passed every case |
+
+### Multi-user foundations (2026-11-02)
+
+| # | Topic | Decision |
+| --- | --- | --- |
+| I30 | Google sign-in | Authorisation code with PKCE, state and nonce, verified locally against Google's keys; an existing account is linked by email on first sign-in; new accounts only while `LIFEOS_OPEN_SIGNUP` is on |
+| I31 | Account isolation | `user_id` on every owned row; the runner, proposal service and executor are built for one account and filter every query by it, so isolation doesn't depend on each route remembering a filter |
+| I32 | Workspace before Notion OAuth | The environment's workspace belongs to the owner account (`is_owner`, at most one), which the bearer token and scheduled jobs act as; other accounts have no workspace until they connect one |
+| I33 | Per-account contexts | Each account's dependencies and compiled graphs are built on first use and cached, rather than passing dependencies through graph config, so the graph code stays unchanged |
+| I34 | Deleting audit entries | Account deletion purges that account's entries through `purge_user_audit`, which the append-only trigger allows only for the account being purged and only during the call |

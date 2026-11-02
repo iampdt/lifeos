@@ -5,16 +5,16 @@ from datetime import UTC, date, datetime
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select, text
 
 from app.api.cron import sign
-from app.api.main import Services, create_app
+from app.api.main import create_app
 from app.core.config import Settings
-from app.db.models import CronRun
+from app.db.models import CronRun, User
 from app.llm.mock import MockLLM
 from app.notion.errors import NotionUnavailable
 from tests.fake_notion import FakeNotion
-from tests.workflow_support import make_runner, seed_task
+from tests.workflow_support import make_services, seed_task
 
 NOW = datetime(2026, 11, 2, 2, 0, tzinfo=UTC)  # 07:30 in Asia/Kolkata
 SECRET = "cron-test-secret"
@@ -24,9 +24,9 @@ SECRET = "cron-test-secret"
 async def cron(session_factory):
     fake = FakeNotion()
     seed_task(fake, "Write tests", priority="P1", due=date(2026, 11, 2))
-    runner, deps = make_runner(session_factory, fake, MockLLM(), now=NOW)
     settings = Settings(_env_file=None, lifeos_cron_secret=SECRET)
-    app = create_app(Services(settings, deps, runner))
+    services, _ = make_services(session_factory, fake, MockLLM(), now=NOW, settings=settings)
+    app = create_app(services)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://t") as c:
         yield c, app, session_factory
 
@@ -78,7 +78,7 @@ async def test_expire_job_and_unknown_job(cron):
 
 async def test_a_failed_run_can_be_retried_the_same_day(cron, monkeypatch):
     client, app, session_factory = cron
-    tasks = app.state.services.deps.workspace.tasks
+    tasks = (await app.state.services.owner_context()).deps.workspace.tasks
 
     async def down():
         raise NotionUnavailable("Notion is down")
@@ -94,19 +94,37 @@ async def test_a_failed_run_can_be_retried_the_same_day(cron, monkeypatch):
 
 
 async def test_unset_secret_disables_cron(session_factory):
-    runner, deps = make_runner(session_factory, FakeNotion(), MockLLM(), now=NOW)
-    app = create_app(Services(Settings(_env_file=None), deps, runner))
+    services, _ = make_services(session_factory, FakeNotion(), MockLLM(), now=NOW)
+    app = create_app(services)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://t") as c:
         response = await call(c, "morning_briefing", signed("morning_briefing"))
     assert response.status_code == 503
 
 
 async def test_production_hides_the_api_docs(session_factory):
-    runner, deps = make_runner(session_factory, FakeNotion(), MockLLM(), now=NOW)
     for env, expected in (("production", 404), ("development", 200)):
-        app = create_app(Services(Settings(_env_file=None, lifeos_env=env), deps, runner))
+        settings = Settings(_env_file=None, lifeos_env=env)
+        services, _ = make_services(
+            session_factory, FakeNotion(), MockLLM(), now=NOW, settings=settings
+        )
+        app = create_app(services)
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="https://t"
         ) as c:
             assert (await c.get("/openapi.json")).status_code == expected
             assert (await c.get("/docs")).status_code == expected
+
+
+async def test_workflow_jobs_run_for_the_owner_and_skip_without_one(cron):
+    client, _, session_factory = cron
+    first = await call(client, "morning_briefing", signed("morning_briefing"))
+    async with session_factory() as db:
+        [row] = list(await db.scalars(select(CronRun)))
+    assert first.json()["status"] == "completed" and row.user_id is not None
+    async with session_factory() as db, db.begin():
+        await db.execute(delete(CronRun))
+        await db.execute(text("TRUNCATE agent_runs CASCADE"))
+        await db.execute(delete(User))
+    skipped = await call(client, "evening_checkin", signed("evening_checkin"))
+    assert skipped.json() == {"job": "evening_checkin", "status": "skipped",
+                              "reason": "no owner account"}  # fmt: skip

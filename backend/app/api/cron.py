@@ -7,8 +7,10 @@ authenticated by an HMAC-SHA256 signature instead of a session:
     X-LifeOS-Signature: hex(HMAC-SHA256(LIFEOS_CRON_SECRET, f"{timestamp}.{job}.{body}"))
 
 The timestamp must be within 5 minutes, and the signature covers the job name, so a captured
-request can't be replayed later or reused for another job. A job runs at most once per local day
-(`cron_runs`), so a retried or duplicated call is harmless.
+request can't be replayed later or reused for another job. A workflow job runs for the owner
+account (per-account schedules come with multi-user step 9.6), at most once per local day
+(`cron_runs`), so a retried or duplicated call is harmless. Expiring proposals covers every
+account and is idempotent, so it simply runs on each call.
 """
 
 from __future__ import annotations
@@ -16,7 +18,10 @@ from __future__ import annotations
 import hashlib
 import hmac
 import time
+import uuid
+from datetime import date
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Header, Request
 from sqlalchemy import delete, update
@@ -25,7 +30,7 @@ from sqlalchemy.dialects.postgresql import insert
 from app.api.errors import ApiError
 from app.api.security import services
 from app.db.models import CronRun
-from app.execution.proposals import ProposalService
+from app.execution.proposals import expire_due
 
 router = APIRouter()
 
@@ -61,40 +66,41 @@ async def run_job(
     if job not in JOBS:
         raise ApiError(404, "unknown_job", f"no cron job {job!r}")
 
-    deps = svc.deps
+    if job == "expire_proposals":
+        today = svc.clock().astimezone(ZoneInfo(svc.settings.timezone)).date()
+        async with svc.session_factory() as db, db.begin():
+            expired = await expire_due(db, clock=svc.clock)
+        return {"job": job, "date": today.isoformat(), "status": "done", "expired": expired}
+
+    context = await svc.owner_context()
+    if context is None:
+        return {"job": job, "status": "skipped", "reason": "no owner account"}
+    deps = context.deps
     today = deps.today()
     async with deps.session_factory() as db, db.begin():
         claimed = await db.scalar(
             insert(CronRun)
-            .values(job=job, local_date=today)
+            .values(user_id=deps.user_id, job=job, local_date=today)
             .on_conflict_do_nothing()
             .returning(CronRun.job)
         )
     if claimed is None:
         return {"job": job, "date": today.isoformat(), "status": "already_ran"}
 
-    if job == "expire_proposals":
-        async with deps.session_factory() as db, db.begin():
-            expired = await ProposalService(db, clock=deps.clock, tz=deps.tz).expire_due()
-            result = {"expired": expired}
-            await _record(db, job, today, result=result)
-        return {"job": job, "date": today.isoformat(), "status": "done", **result}
-
-    view = await svc.runner.start(job, trigger="cron")
+    view = await context.runner.start(job, trigger="cron")
     async with deps.session_factory() as db, db.begin():
+        slot = _slot(deps.user_id, job, today)
         if view.status == "failed":
             # Free the slot so a retry later the same day can try again.
-            await db.execute(delete(CronRun).where(CronRun.job == job, CronRun.local_date == today))
+            await db.execute(delete(CronRun).where(*slot))
         else:
-            await _record(db, job, today, run_id=view.id, result={"status": view.status})
+            await db.execute(
+                update(CronRun).where(*slot).values(run_id=view.id, result={"status": view.status})
+            )
     if view.status == "failed":
         raise ApiError(502, "run_failed", (view.error or {}).get("message", "run failed"), True)
     return {"job": job, "date": today.isoformat(), "status": view.status, "run_id": view.id}
 
 
-async def _record(db, job: str, day, *, run_id: str | None = None, result: dict) -> None:
-    await db.execute(
-        update(CronRun)
-        .where(CronRun.job == job, CronRun.local_date == day)
-        .values(run_id=run_id, result=result)
-    )
+def _slot(user_id: uuid.UUID, job: str, day: date) -> tuple:
+    return (CronRun.user_id == user_id, CronRun.job == job, CronRun.local_date == day)

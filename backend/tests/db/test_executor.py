@@ -18,6 +18,7 @@ from app.execution.executor import Executor, take_snapshot
 from app.execution.proposals import ProposalService, utcnow
 from tests.factories import specs
 from tests.fake_notion import FakeNotion
+from tests.workflow_support import OWNER_ID
 
 SPECS = specs()
 TASKS, HABITS, WEEKS, MONTHS = (SPECS[n] for n in ("tasks", "habits", "weeks", "months"))
@@ -30,14 +31,14 @@ def open_task(fake: FakeNotion, **overrides) -> str:
 
 async def approved(session_factory, kind, payload, *, clock=utcnow, **kwargs):
     async with session_factory() as session, session.begin():
-        service = ProposalService(session, clock=clock)
+        service = ProposalService(session, user_id=OWNER_ID, clock=clock)
         proposal, _ = await service.propose(kind, payload, reason="test", **kwargs)
         await service.approve(proposal.id)
         return proposal.id
 
 
 def executor(session_factory, fake, writes=True) -> Executor:
-    return Executor(session_factory, fake, SPECS, writes_enabled=writes)
+    return Executor(session_factory, fake, SPECS, user_id=OWNER_ID, writes_enabled=writes)
 
 
 async def proposal_row(session_factory, proposal_id):
@@ -146,7 +147,7 @@ async def test_a_rejected_dependency_fails_the_dependent_action(session_factory)
         MONTHS, {"title": "Nov", "start": date(2026, 11, 1), "end": date(2026, 11, 30)}
     )
     async with session_factory() as session, session.begin():
-        service = ProposalService(session)
+        service = ProposalService(session, user_id=OWNER_ID)
         week, _ = await service.propose(
             ActionKind.WEEK_CREATE,
             CreatePeriod(title="W", start=date(2026, 11, 2), end=date(2026, 11, 8)), reason="r",
@@ -204,7 +205,7 @@ async def test_retry_after_an_ambiguous_create_never_duplicates(session_factory)
     [first] = await executor(session_factory, fake).execute_approved()
     assert first.outcome == "failed"
     async with session_factory() as session, session.begin():
-        await ProposalService(session).retry(proposal_id)
+        await ProposalService(session, user_id=OWNER_ID).retry(proposal_id)
     [second] = await executor(session_factory, fake).execute_approved()
     assert second.outcome == "noop" and fake.create_calls == 1
     titles = [p["properties"]["Task"]["title"][0]["plain_text"] for p in fake.pages.values()]
@@ -252,7 +253,7 @@ async def test_only_approved_proposals_execute(session_factory, status):
     fake = FakeNotion()
     task = open_task(fake)
     async with session_factory() as session, session.begin():
-        service = ProposalService(session)
+        service = ProposalService(session, user_id=OWNER_ID)
         proposal, _ = await service.propose(
             ActionKind.TASK_MARK_DONE,
             MarkDone(page_id=task, completed_on=date(2026, 11, 1)),

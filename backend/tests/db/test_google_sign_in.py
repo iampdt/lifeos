@@ -12,14 +12,13 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy import select, update
 
-from app.api.main import Services, create_app
+from app.api.main import create_app
 from app.auth.google import JWKS_URL, TOKEN_URL, GoogleOIDC
-from app.auth.sessions import SessionService
 from app.core.config import Settings
 from app.db.models import AuditLog, OAuthState, User
 from app.llm.mock import MockLLM
 from tests.fake_notion import FakeNotion
-from tests.workflow_support import make_runner
+from tests.workflow_support import make_services, set_password
 
 CLIENT_ID = "client-id.apps.googleusercontent.com"
 REDIRECT_URI = "https://app.test/api/v1/auth/google/callback"
@@ -83,7 +82,6 @@ class Env:
 
 def make_env(session_factory, **settings):
     google = FakeGoogle()
-    runner, deps = make_runner(session_factory, FakeNotion(), MockLLM(), now=NOW)
     config = Settings(
         _env_file=None,
         google_client_id=CLIENT_ID,
@@ -97,15 +95,17 @@ def make_env(session_factory, **settings):
         REDIRECT_URI,
         http=httpx.AsyncClient(transport=httpx.MockTransport(google.handler)),
     )
-    app = create_app(Services(config, deps, runner, google=oidc))
+    services, _ = make_services(
+        session_factory, FakeNotion(), MockLLM(), now=NOW, settings=config, google=oidc
+    )
+    app = create_app(services)
     client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://test")
     return Env(client, google, session_factory)
 
 
 @pytest.fixture
 async def env(session_factory):
-    async with session_factory() as db, db.begin():
-        await SessionService(db).create_owner(OWNER, "a long test password")
+    await set_password(session_factory, "a long test password")
     env = make_env(session_factory)
     async with env.client:
         yield env
@@ -242,8 +242,8 @@ async def test_open_sign_up_creates_an_account_without_a_password(open_env):
     assert response.headers["location"] == "/"
     assert (await open_env.client.get("/api/v1/auth/me")).json()["email"] == "new@example.com"
     async with open_env.session_factory() as db:
-        user = await db.scalar(select(User))
-    assert user.google_sub == "google-999" and user.password_hash is None
+        user = await db.scalar(select(User).where(User.email == "new@example.com"))
+    assert not user.is_owner and user.google_sub == "google-999" and user.password_hash is None
 
 
 async def test_an_email_linked_to_another_google_account_is_refused(env):
@@ -265,8 +265,8 @@ async def test_password_sign_in_is_off_once_google_is_configured(env):
 
 
 async def test_google_routes_do_not_exist_without_configuration(session_factory):
-    runner, deps = make_runner(session_factory, FakeNotion(), MockLLM(), now=NOW)
-    app = create_app(Services(Settings(_env_file=None), deps, runner))
+    services, _ = make_services(session_factory, FakeNotion(), MockLLM(), now=NOW)
+    app = create_app(services)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="https://test") as client:
         assert (await client.get("/api/v1/auth/google/start")).status_code == 404

@@ -24,6 +24,7 @@ from app.notion.client import NotionClient
 from app.notion.mapping import load_mapping
 from app.notion.repositories import TaskRepository
 from app.services.calendar import month_range, week_key, week_range
+from tests.workflow_support import OWNER_ID
 
 pytestmark = [
     pytest.mark.live,
@@ -46,11 +47,13 @@ async def test_full_write_cycle_on_the_sandbox(session_factory):
     specs = {name: spec for name, spec in sandbox.items() if spec.configured}
 
     async with NotionClient(settings.notion_token.get_secret_value()) as client:
-        executor = Executor(session_factory, client, specs, writes_enabled=True, actor="test")
+        executor = Executor(
+            session_factory, client, specs, user_id=OWNER_ID, writes_enabled=True, actor="test"
+        )
 
         async def run(kind, payload, **kwargs):
             async with session_factory() as session, session.begin():
-                service = ProposalService(session)
+                service = ProposalService(session, user_id=OWNER_ID)
                 proposal, _ = await service.propose(kind, payload, reason="sandbox test", **kwargs)
                 await service.approve(proposal.id)
             [result] = await executor.execute_approved([proposal.id])

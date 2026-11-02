@@ -1,8 +1,11 @@
 """Start, resume and inspect workflow runs; keep `agent_runs` in step with the graph.
 
 Each run is a LangGraph thread (thread_id = run id) checkpointed by the configured saver, so a
-run can wait for the owner for hours. Resuming is a compare-and-set on the run's status, so two
+run can wait for its owner for hours. Resuming is a compare-and-set on the run's status, so two
 clients answering at once can't both advance the same run.
+
+A runner serves one account (its `deps`): it only starts, lists, reads and resumes that
+account's runs.
 """
 
 from __future__ import annotations
@@ -95,8 +98,8 @@ class WorkflowRunner:
         run_id = uuid.uuid4()
         async with self.deps.session_factory() as session, session.begin():
             session.add(
-                AgentRun(id=run_id, workflow=workflow, trigger=trigger,
-                         thread_id=str(run_id), status="running")
+                AgentRun(id=run_id, user_id=self.deps.user_id, workflow=workflow,
+                         trigger=trigger, thread_id=str(run_id), status="running")
             )  # fmt: skip
         return await self._advance(
             run_id, workflow, {"run_id": str(run_id), "inputs": inputs or {}}
@@ -106,7 +109,11 @@ class WorkflowRunner:
         async with self.deps.session_factory() as session, session.begin():
             workflow = await session.scalar(
                 update(AgentRun)
-                .where(AgentRun.id == run_id, AgentRun.status.in_(set(WAITING.values())))
+                .where(
+                    AgentRun.id == run_id,
+                    AgentRun.user_id == self.deps.user_id,
+                    AgentRun.status.in_(set(WAITING.values())),
+                )
                 .values(status="running")
                 .returning(AgentRun.workflow)
             )
@@ -116,14 +123,21 @@ class WorkflowRunner:
 
     async def recent(self, *, limit: int = 20, status: str | None = None) -> list[RunView]:
         async with self.deps.session_factory() as session:
-            query = select(AgentRun).order_by(AgentRun.started_at.desc()).limit(limit)
+            query = (
+                select(AgentRun)
+                .where(AgentRun.user_id == self.deps.user_id)
+                .order_by(AgentRun.started_at.desc())
+                .limit(limit)
+            )
             if status:
                 query = query.where(AgentRun.status == status)
             return [RunView.from_row(row) for row in await session.scalars(query)]
 
     async def get(self, run_id: uuid.UUID) -> RunView:
         async with self.deps.session_factory() as session:
-            row = await session.get(AgentRun, run_id)
+            row = await session.scalar(
+                select(AgentRun).where(AgentRun.id == run_id, AgentRun.user_id == self.deps.user_id)
+            )
         if row is None:
             raise RunStateError("run not found")
         return RunView.from_row(row)

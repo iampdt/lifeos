@@ -10,6 +10,7 @@ import { DemoBanner } from "@/components/demo-banner";
 import { useSession, useSignOut } from "@/components/session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import type { SettingsView } from "@/lib/types";
@@ -21,7 +22,12 @@ const NAV = [
 ];
 
 export function useSettings() {
-  return useQuery({ queryKey: ["settings"], queryFn: () => api<SettingsView>("/settings") });
+  const session = useSession();
+  return useQuery({
+    queryKey: ["settings"],
+    queryFn: () => api<SettingsView>("/settings"),
+    enabled: session?.workspace !== false,
+  });
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -29,6 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const session = useSession();
   const signOut = useSignOut();
   const settings = useSettings();
+  const noWorkspace = session?.workspace === false;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -66,7 +73,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </TooltipContent>
               </Tooltip>
             )}
-            <ApprovalsSheet />
+            {!noWorkspace && <ApprovalsSheet />}
             <Tooltip>
               <TooltipTrigger render={<Button variant="ghost" size="icon-sm" onClick={signOut} aria-label="Sign out" />}>
                 <LogOutIcon />
@@ -77,7 +84,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       {settings.data?.demo && <DemoBanner />}
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
+        {noWorkspace && pathname !== "/settings" ? <NoWorkspace /> : children}
+      </main>
     </div>
+  );
+}
+
+function NoWorkspace() {
+  return (
+    <Card className="mx-auto max-w-lg">
+      <CardHeader>
+        <CardTitle>No Notion workspace yet</CardTitle>
+        <CardDescription>
+          Your account is set up, but it isn&apos;t connected to a Notion workspace, so there&apos;s
+          nothing to plan or review yet. Connecting your own workspace is coming soon.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="text-sm text-muted-foreground">
+        You can delete your account at any time in{" "}
+        <Link href="/settings" className="underline underline-offset-4">Settings</Link>.
+      </CardContent>
+    </Card>
   );
 }

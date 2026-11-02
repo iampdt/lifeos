@@ -21,7 +21,8 @@ Design rationale for each choice is in [decisions.md](decisions.md); endpoints a
 
 - Replacing Notion, mirroring it into Postgres, or adding Notion databases.
 - Autonomous changes: in v1 every write needs approval.
-- Multi-user SaaS: one owner, one workspace.
+- Multi-user SaaS in v1: one owner, one workspace. Phase 9 opens it to more accounts
+  ([multi-user.md](multi-user.md)); data is already separated per account.
 
 ## 2. System overview
 
@@ -44,7 +45,7 @@ cookie is first-party. Scheduled jobs call the backend directly with a signed re
 | --- | --- |
 | `api/` | FastAPI app and routes, request guard (session + CSRF, or bearer token), signed cron endpoint, error shape |
 | `auth/` | Google sign-in (OpenID Connect), account linking, argon2id passwords, server-side sessions, login rate limiter |
-| `workflows/` | LangGraph graphs (`evening.py`, `morning.py`, `weekly.py`), the run manager, the two-phase proposal builder |
+| `workflows/` | LangGraph graphs (`evening.py`, `morning.py`, `weekly.py`), the run manager, the two-phase proposal builder, per-account contexts (`contexts.py`) |
 | `agents/` | Specialists: `planner`, `checkin`, `reviewer`, `chat`. Each is a prompt, an output schema and validation |
 | `execution/` | Action kinds and payloads, proposal lifecycle, executor, audit log |
 | `permissions/` | Field-level write allowlist and per-kind permission modes |
@@ -195,8 +196,8 @@ GitHub Actions calls `POST /api/v1/internal/cron/{job}` with an HMAC signature (
 | 21:00 daily | `evening_checkin` (waits for the owner's answer) |
 | 18:00 Sunday | `weekly_review` (waits for decisions) |
 
-A job runs at most once per local day (`cron_runs`). If a run fails, its slot is released so a
-retry can run.
+Workflow jobs run for the owner account (per-account schedules come in Phase 9), at most once
+per local day (`cron_runs`). If a run fails, its slot is released so a retry can run.
 
 ## 6. Actions, approvals and permissions
 
@@ -240,10 +241,10 @@ field values.
 
 ### 6.4 Idempotency
 
-- Proposal key: SHA-256 of kind, payload and local day, unique in Postgres. The same suggestion
-  twice in a day is one proposal; on a later day it is a new one.
+- Proposal key: SHA-256 of kind, payload and local day, unique per account in Postgres. The
+  same suggestion twice in a day is one proposal; on a later day it is a new one.
 - Updates are naturally idempotent; creates use find-or-create (§3.4).
-- Scheduled jobs run at most once per (job, local date).
+- Scheduled jobs run at most once per (account, job, local date).
 
 ## 7. LLM layer
 
@@ -263,14 +264,18 @@ field values.
 
 ## 8. Data model
 
+Every row of `agent_runs`, `action_proposals`, `cron_runs` and `audit_log` belongs to an
+account (`user_id`), and every query filters on it.
+
 | Table | Contents |
 | --- | --- |
 | `agent_runs` | One row per workflow or chat run: status, waiting request or summary, provider, model, tokens, latency, error |
 | `action_proposals` | Kind, payload, edited payload, before-snapshot, reason, rule IDs, status, dependencies, idempotency key, expiry, target title, result page |
 | `action_executions` | One row per execution attempt and its outcome |
-| `audit_log` | Append-only (a trigger rejects `UPDATE` and `DELETE`): actor, event, entity, details. IDs and kinds only, no page contents |
-| `users`, `sessions` | The owner account; sessions store a SHA-256 of the cookie token and a CSRF token |
-| `cron_runs` | One row per (job, local date) |
+| `audit_log` | Append-only (a trigger rejects `UPDATE` and `DELETE`, except through `purge_user_audit` when an account is deleted): account, actor, event, entity, details. IDs and kinds only, no page contents |
+| `users`, `sessions` | Accounts (Google subject ID or password hash; at most one `is_owner`); sessions store a SHA-256 of the cookie token and a CSRF token |
+| `oauth_states` | Single-use sign-in attempts: state, nonce, PKCE verifier, expiry |
+| `cron_runs` | One row per (account, job, local date) |
 | `checkpoint*` | LangGraph checkpoints, created and migrated by the checkpointer itself |
 
 Productivity records stay in Notion. Postgres holds only state LifeOS owns. Migrations are in
@@ -290,8 +295,14 @@ Productivity records stay in Notion. Postgres holds only state LifeOS owns. Migr
 - **CSRF:** every request that changes state must send the session's `X-CSRF-Token`.
 - **Machine access:** a bearer token for scripts; HMAC signatures with a 5-minute window for
   scheduled jobs. Both fail closed when their secret isn't configured.
-- **Authorization:** one owner; every route except health, sign-in and signed cron requires a
-  session or the bearer token. The web app's sign-in redirect is a convenience only.
+- **Authorization:** every route except health, sign-in and signed cron requires a session or
+  the bearer token (which acts as the owner account). Each account sees and acts on only its own
+  runs, proposals and workspace: the runner, proposal service and executor are built for one
+  account and filter every query by it, and tests check that another account's IDs behave as if
+  they didn't exist. The web app's sign-in redirect is a convenience only.
+- **Deleting an account** removes everything stored for it in one transaction, its run
+  checkpoints, and its audit entries through a database function that the append-only trigger
+  allows only for that account; a single ID-only entry records the deletion.
 - **Production** hides the OpenAPI schema and interactive docs.
 - **Logs and audit records** hold IDs, kinds and counts, never task titles, notes or tokens. Chat
   messages and answers are not stored.

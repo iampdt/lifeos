@@ -177,7 +177,7 @@ async def test_writes_disabled_blocks_and_old_approvals_expire(session_factory):
     assert read(fake, "tasks", ids["tests"])["status"] == "Next"
 
     # Turning writes on two days later must not execute the forgotten approval.
-    later = Executor(session_factory, fake, SPECS, writes_enabled=True,
+    later = Executor(session_factory, fake, SPECS, user_id=deps.user_id, writes_enabled=True,
                      clock=lambda: SUNDAY_EVENING + timedelta(days=2))  # fmt: skip
     [result] = await later.execute_approved()
     assert result.outcome == "skipped" and result.detail == "approval expired"

@@ -57,12 +57,18 @@ async def reset_demo(deps: WorkflowDeps) -> None:
 
 
 async def demo_user(session_factory: async_sessionmaker[AsyncSession]) -> User:
-    """The shared demo account. Its password is random and never used: visitors get a session
-    through `POST /auth/demo`."""
+    """The shared demo account, which owns the demo deployment and so uses the sample
+    workspace. Its password is random and never used: visitors get a session through
+    `POST /auth/demo`."""
     async with session_factory() as db, db.begin():
         user = await db.scalar(select(User).where(User.email == DEMO_EMAIL))
         if user is None:
-            user = User(email=DEMO_EMAIL, password_hash=hash_password(secrets.token_urlsafe(32)))
+            user = User(
+                email=DEMO_EMAIL,
+                password_hash=hash_password(secrets.token_urlsafe(32)),
+                is_owner=True,
+            )
             db.add(user)
             await db.flush()
+        user.is_owner = True
         return user

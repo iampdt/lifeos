@@ -47,7 +47,7 @@ class SessionService:
     async def login(self, email: str, password: str) -> tuple[str, Session, User] | None:
         user = await self.db.scalar(select(User).where(User.email == normalize_email(email)))
         if not verify_password(user.password_hash if user else None, password):
-            audit(self.db, actor="system", event="auth.login_failed")
+            audit(self.db, actor="system", event="auth.login_failed", user_id=None)
             return None
         assert user is not None
         if needs_rehash(user.password_hash):
@@ -66,7 +66,7 @@ class SessionService:
         )
         self.db.add(session)
         await self.db.flush()
-        audit(self.db, actor="owner", event="auth.login", entity_type="user",
+        audit(self.db, actor="user", event="auth.login", user_id=user.id, entity_type="user",
               entity_id=str(user.id))  # fmt: skip
         return token, session
 
@@ -89,15 +89,18 @@ class SessionService:
         )
         if session and session.revoked_at is None:
             session.revoked_at = self.clock()
-            audit(self.db, actor="owner", event="auth.logout", entity_type="user",
-                  entity_id=str(session.user_id))  # fmt: skip
+            audit(self.db, actor="user", event="auth.logout", user_id=session.user_id,
+                  entity_type="user", entity_id=str(session.user_id))  # fmt: skip
 
     async def create_owner(self, email: str, password: str) -> User:
-        user = User(email=normalize_email(email), password_hash=hash_password(password))
+        """The deployment owner's account (see `User.is_owner`); there can be only one."""
+        user = User(
+            email=normalize_email(email), password_hash=hash_password(password), is_owner=True
+        )
         self.db.add(user)
         await self.db.flush()
-        audit(self.db, actor="system", event="auth.owner_created", entity_type="user",
-              entity_id=str(user.id))  # fmt: skip
+        audit(self.db, actor="system", event="auth.owner_created", user_id=user.id,
+              entity_type="user", entity_id=str(user.id))  # fmt: skip
         return user
 
 

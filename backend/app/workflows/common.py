@@ -18,7 +18,7 @@ from sqlalchemy import select
 
 from app.db.models import ActionProposal
 from app.domain.models import Task
-from app.execution.proposals import ProposalError, ProposalService
+from app.execution.proposals import ProposalError
 from app.workflows.deps import WorkflowDeps
 
 
@@ -67,7 +67,10 @@ async def proposal_cards(
         rows = {
             str(r.id): r
             for r in await session.scalars(
-                select(ActionProposal).where(ActionProposal.id.in_([uuid.UUID(i) for i in ids]))
+                select(ActionProposal).where(
+                    ActionProposal.id.in_([uuid.UUID(i) for i in ids]),
+                    ActionProposal.user_id == deps.user_id,
+                )
             )
         }
     cards = []
@@ -98,7 +101,7 @@ async def proposal_cards(
 
 
 async def apply_decisions(
-    deps: WorkflowDeps, ids: Sequence[str], answer: Any, *, actor: str = "owner"
+    deps: WorkflowDeps, ids: Sequence[str], answer: Any, *, actor: str = "user"
 ) -> dict[str, Any]:
     answer = answer if isinstance(answer, dict) else {}
     requested = answer.get("approve")
@@ -118,8 +121,8 @@ async def apply_decisions(
         pid = uuid.UUID(proposal_id)
         try:
             async with deps.session_factory() as session, session.begin():
-                service = ProposalService(session, clock=deps.clock, tz=deps.tz)
-                row = await session.get(ActionProposal, pid)
+                service = deps.proposals(session)
+                row = await service.get(pid)
                 if row is not None and row.status == "approved" and proposal_id in approve:
                     approved.append(proposal_id)  # approved earlier today (same proposal)
                     continue

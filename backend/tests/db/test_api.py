@@ -5,11 +5,11 @@ from datetime import UTC, date, datetime
 import httpx
 import pytest
 
-from app.api.main import Services, create_app
+from app.api.main import create_app
 from app.core.config import Settings
 from app.llm.mock import MockLLM
 from tests.fake_notion import FakeNotion
-from tests.workflow_support import make_runner, seed_task
+from tests.workflow_support import make_services, seed_task
 
 NOW = datetime(2026, 11, 1, 15, 0, tzinfo=UTC)
 AUTH = {"Authorization": "Bearer test-token"}
@@ -19,9 +19,9 @@ AUTH = {"Authorization": "Bearer test-token"}
 async def api(session_factory):
     fake = FakeNotion()
     seed_task(fake, "Write tests", priority="P1", due=date(2026, 11, 1))
-    runner, deps = make_runner(session_factory, fake, MockLLM(), now=NOW)
     settings = Settings(_env_file=None, lifeos_api_token="test-token")
-    app = create_app(Services(settings, deps, runner))
+    services, _ = make_services(session_factory, fake, MockLLM(), now=NOW, settings=settings)
+    app = create_app(services)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         yield client, app

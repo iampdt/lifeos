@@ -40,8 +40,10 @@ tasks, with nothing in the code that only makes sense for one person's setup.
    Otherwise a new account is created, but only while `LIFEOS_OPEN_SIGNUP` is on; it stays off
    until per-user data isolation (9.2) is in place. A normal session (HttpOnly cookie, CSRF
    token) follows.
-4. **Delete account** removes the user's tokens, settings, runs, proposals and sessions. Notion
-   content is never touched.
+4. **Delete account** (Settings) removes the user's runs and their checkpoints, proposals,
+   executions, scheduled-job records, audit entries and sessions (and, from 9.3, tokens and
+   settings). Notion content is never touched. It needs the account's email typed as
+   confirmation and a browser session; the shared demo account can't be deleted.
 
 ## Notion connection
 
@@ -82,13 +84,21 @@ tasks, with nothing in the code that only makes sense for one person's setup.
 ## Multi-tenancy
 
 - `user_id` on runs, proposals, executions (through proposals), audit entries and scheduled-job
-  records, indexed and filtered in every query. Tests assert that one user can never see or act
-  on another user's runs, proposals or tasks (by guessing IDs).
-- Workflow dependencies (Notion client, mapping, timezone, model router) are built per request
-  from the signed-in user, and passed to the compiled graphs at run time instead of being bound
-  when the graphs are built.
-- Account deletion removes the user's audit entries through a dedicated database function; the
-  audit log stays append-only for everything else.
+  records, indexed and filtered in every query. Proposal idempotency keys are unique per
+  account. Tests assert that one user can never see or act on another user's runs, proposals or
+  tasks by guessing IDs.
+- Each account has a context: its workflow dependencies (Notion client, mapping, timezone, model
+  router, `user_id`) and a runner whose graphs are compiled with them. Contexts are built on
+  first use and cached per account; the runner, proposal service and executor only ever touch
+  their account's rows.
+- Until accounts connect their own Notion (9.3), the deployment's environment-configured
+  workspace belongs to the **owner account** (`users.is_owner`, at most one). The bearer token
+  and the scheduled jobs act as the owner. Other accounts can sign in, see a "no workspace yet"
+  page and delete their account; workspace routes return 409 `no_workspace`.
+- Account deletion removes the user's audit entries through a dedicated database function
+  (`purge_user_audit`); the audit log stays append-only for everything else.
+- Migration 0005 gives existing rows to the owner (the earliest account) and refuses to run if
+  there are runs or proposals but no account.
 
 ## Scheduling
 
@@ -111,7 +121,7 @@ whose local time has reached a scheduled routine that hasn't run today, the API 
 | Step | Scope | Status |
 | --- | --- | --- |
 | 9.1 | Google sign-in and account linking; passwords only where Google isn't configured | Done |
-| 9.2 | Multi-tenancy: `user_id` everywhere, per-request dependencies, isolation tests, delete account | |
+| 9.2 | Multi-tenancy: `user_id` everywhere, per-account contexts, isolation tests, delete account | Done |
 | 9.3 | Notion OAuth connect, encrypted tokens with refresh, disconnect | |
 | 9.4 | Generic workspace model: modules, mappings, onboarding UI, template, generic habits, per-user rules | |
 | 9.5 | AI allowance, own-key option, disclosure and consent | |

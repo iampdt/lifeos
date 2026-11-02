@@ -15,7 +15,6 @@ from typing import Any, Literal
 
 from app.execution.actions import ActionKind, Payload, SetDue
 from app.execution.executor import take_snapshot
-from app.execution.proposals import ProposalService
 from app.services.periods import PeriodResolver, PeriodTarget
 from app.workflows.deps import WorkflowDeps
 
@@ -94,7 +93,7 @@ class ProposalBuilder:
         ids: list[uuid.UUID] = []
         created: dict[tuple[str, str], uuid.UUID] = {}
         async with self.deps.session_factory() as session, session.begin():
-            service = ProposalService(session, clock=self.deps.clock, tz=self.deps.tz)
+            service = self.deps.proposals(session)
             for draft in self._drafts:
                 payload = draft.payload
                 if draft.move:

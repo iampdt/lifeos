@@ -1,31 +1,45 @@
 """The public demo over HTTP: sign-in without a password, the sample workspace, reset."""
 
 from datetime import UTC, datetime
+from functools import partial
 
 import httpx
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
+from sqlalchemy import delete
 
 from app.api.main import Services, create_app
 from app.core.config import BACKEND_ROOT, Settings
+from app.db.models import User
 from app.demo.setup import demo_notion, demo_specs, demo_user, reset_demo
 from app.llm.mock import MockLLM
+from app.workflows.contexts import Contexts
 from app.workflows.deps import WorkflowDeps
-from app.workflows.runner import WorkflowRunner
 from tests.workflow_support import router
 
 NOW = datetime(2026, 11, 4, 15, 0, tzinfo=UTC)  # Wednesday evening in Asia/Kolkata
 
 
 async def demo_app(session_factory, demo: bool = True):
-    deps = WorkflowDeps(
-        session_factory, demo_notion(), demo_specs(BACKEND_ROOT / "config" / "notion_mapping.yaml"),
-        router(MockLLM()), writes_enabled=True, clock=lambda: NOW,
-    )  # fmt: skip
-    await reset_demo(deps)
-    await demo_user(session_factory)
+    async with session_factory() as db, db.begin():
+        await db.execute(delete(User))  # a demo database holds only the demo account
+    user = await demo_user(session_factory)
+    make_deps = partial(
+        WorkflowDeps,
+        session_factory,
+        demo_notion(),
+        demo_specs(BACKEND_ROOT / "config" / "notion_mapping.yaml"),
+        router(MockLLM()),
+        writes_enabled=True,
+        clock=lambda: NOW,
+    )
+    contexts = Contexts(lambda user_id: make_deps(user_id=user_id), InMemorySaver())
+    context = contexts.for_user(user.id, is_owner=True)
+    assert context is not None
+    await reset_demo(context.deps)
     settings = Settings(_env_file=None, lifeos_demo_mode=demo)
-    return create_app(Services(settings, deps, WorkflowRunner(deps, InMemorySaver()))), deps
+    services = Services(settings, session_factory, contexts, clock=lambda: NOW)
+    return create_app(services), context.deps
 
 
 @pytest.fixture
@@ -83,6 +97,10 @@ async def test_workflows_run_on_the_sample_workspace_and_reset_restores_it(clien
         await c.post("/api/v1/demo/reset", headers=headers)
     limited = await c.post("/api/v1/demo/reset", headers=headers)
     assert limited.status_code == 429
+    deleted = await c.post(
+        "/api/v1/account/delete", json={"confirm": "demo@example.com"}, headers=headers
+    )
+    assert deleted.status_code == 403 and deleted.json()["error"]["code"] == "demo_account"
 
 
 async def test_demo_endpoints_do_not_exist_outside_demo_mode(session_factory):

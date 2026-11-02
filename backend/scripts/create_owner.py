@@ -1,4 +1,7 @@
-"""Create the owner account, or set a new password for it.
+"""Create the owner account, or set a new password for an account.
+
+The owner is the account that uses the Notion workspace configured in the environment; there is
+at most one.
 
     python -m scripts.create_owner you@example.com            # prompts for the password
     python -m scripts.create_owner you@example.com --reset    # change the password
@@ -47,6 +50,10 @@ async def main() -> int:
                 return 1
             if not user and args.reset:
                 print("No account with that email.", file=sys.stderr)
+                return 1
+            owner = await db.scalar(select(User).where(User.is_owner))
+            if owner and not user:
+                print(f"{owner.email} is already the owner account.", file=sys.stderr)
                 return 1
             try:
                 password = read_password()

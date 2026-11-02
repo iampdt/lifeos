@@ -37,6 +37,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("oauth_states")
+    # Accounts without a password get an unusable hash ("!" never verifies), so they stay
+    # locked rather than being deleted.
+    op.execute("UPDATE users SET password_hash = '!' WHERE password_hash IS NULL")
     op.alter_column("users", "password_hash", existing_type=sa.Text, nullable=False)
     op.drop_column("users", "name")
     op.drop_column("users", "google_sub")

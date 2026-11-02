@@ -6,11 +6,19 @@ import { createContext, useContext, useEffect } from "react";
 
 import { ApiError, api, setCsrfToken } from "@/lib/api";
 
-export type Me = { via: string; email: string | null; csrf_token: string | null };
+export type Me = {
+  via: string;
+  email: string;
+  name: string | null;
+  csrf_token: string | null;
+  owner: boolean;
+  /** False until the account has a Notion workspace to work on. */
+  workspace: boolean;
+};
 
 const SessionContext = createContext<Me | null>(null);
 
-/** The signed-in owner, or null while the session is still being checked. */
+/** The signed-in account, or null while the session is still being checked. */
 export function useSession() {
   return useContext(SessionContext);
 }

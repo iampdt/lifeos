@@ -7,15 +7,14 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from app.api.main import Services, create_app
-from app.auth.sessions import SessionService
+from app.api.main import create_app
 from app.core.config import Settings
 from app.db.models import ActionProposal, AgentRun
 from app.llm.base import LLMUnavailable
 from app.llm.mock import MockLLM
 from tests.factories import data_source_schema
 from tests.fake_notion import FakeNotion
-from tests.workflow_support import SPECS, make_runner, read, seed_task
+from tests.workflow_support import SPECS, make_services, read, seed_task, set_password
 
 NOW = datetime(2026, 11, 1, 15, 0, tzinfo=UTC)
 EMAIL, PASSWORD = "owner@example.com", "a long test password"
@@ -38,11 +37,10 @@ class Env:
 async def env(session_factory):
     fake = FakeNotion()
     mock = MockLLM()
-    runner, deps = make_runner(session_factory, fake, mock, now=NOW)
     settings = Settings(_env_file=None, lifeos_api_token="test-token")
-    app = create_app(Services(settings, deps, runner))
-    async with session_factory() as db, db.begin():
-        await SessionService(db).create_owner(EMAIL, PASSWORD)
+    services, _ = make_services(session_factory, fake, mock, now=NOW, settings=settings)
+    app = create_app(services)
+    await set_password(session_factory, PASSWORD)
     transport = httpx.ASGITransport(app=app)
     # https, because the session cookie is Secure.
     async with httpx.AsyncClient(transport=transport, base_url="https://test") as client:
@@ -86,9 +84,9 @@ async def test_logout_revokes_the_session(env):
 
 async def test_expired_session_and_login_rate_limit(env):
     await env.login()
-    env.app.state.services.deps.clock = lambda: NOW + timedelta(days=15)
+    env.app.state.services.clock = lambda: NOW + timedelta(days=15)
     assert (await env.client.get("/api/v1/auth/me")).status_code == 401
-    env.app.state.services.deps.clock = lambda: NOW
+    env.app.state.services.clock = lambda: NOW
     codes = [
         (
             await env.client.post("/api/v1/auth/login", json={"email": EMAIL, "password": "x"})

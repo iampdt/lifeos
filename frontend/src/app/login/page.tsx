@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, api, setCsrfToken } from "@/lib/api";
 
-type Me = { email: string; csrf_token: string };
+type SignedIn = { email: string; csrf_token: string };
 type Meta = { demo: boolean; google: boolean; password: boolean };
 
 export default function LoginPage() {
@@ -79,9 +79,9 @@ function GoogleMark() {
 function useSignedIn() {
   const router = useRouter();
   const client = useQueryClient();
-  return (me: Me) => {
-    setCsrfToken(me.csrf_token);
-    client.setQueryData(["me"], { via: "session", ...me });
+  return (signedIn: SignedIn) => {
+    setCsrfToken(signedIn.csrf_token);
+    client.removeQueries({ queryKey: ["me"] }); // the app reloads the full account
     router.replace("/");
   };
 }
@@ -98,7 +98,7 @@ function PasswordSignIn() {
     setPending(true);
     setError(null);
     try {
-      signedIn(await api<Me>("/auth/login", { method: "POST", body: { email, password } }));
+      signedIn(await api<SignedIn>("/auth/login", { method: "POST", body: { email, password } }));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't reach the backend.");
     } finally {
@@ -150,7 +150,7 @@ function DemoEntry() {
     setPending(true);
     setError(null);
     try {
-      signedIn(await api<Me>("/auth/demo", { method: "POST" }));
+      signedIn(await api<SignedIn>("/auth/demo", { method: "POST" }));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't reach the demo. Try again in a minute.");
       setPending(false);

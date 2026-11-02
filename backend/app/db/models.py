@@ -9,14 +9,18 @@ from typing import Any
 from sqlalchemy import (
     ARRAY,
     BigInteger,
+    Boolean,
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    false,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -28,8 +32,10 @@ class Base(DeclarativeBase):
 
 class AgentRun(Base):
     __tablename__ = "agent_runs"
+    __table_args__ = (Index("ix_agent_runs_user_started", "user_id", "started_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     workflow: Mapped[str] = mapped_column(String(64))
     trigger: Mapped[str] = mapped_column(String(16))  # manual | cron | chat | test
     thread_id: Mapped[str] = mapped_column(String(128))
@@ -49,8 +55,14 @@ class AgentRun(Base):
 
 class ActionProposal(Base):
     __tablename__ = "action_proposals"
+    __table_args__ = (
+        # Idempotency is per account: two people can get the same suggestion on the same day.
+        UniqueConstraint("user_id", "idempotency_key", name="uq_action_proposals_user_key"),
+        Index("ix_action_proposals_user_status", "user_id", "status"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agent_runs.id"))
     kind: Mapped[str] = mapped_column(String(48))
     target_data_source: Mapped[str] = mapped_column(String(32))
@@ -64,7 +76,7 @@ class ActionProposal(Base):
     status: Mapped[str] = mapped_column(String(16), index=True)
     importance: Mapped[str] = mapped_column(String(16), default="normal")
     depends_on: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), default=list)
-    idempotency_key: Mapped[str] = mapped_column(String(64), unique=True)
+    idempotency_key: Mapped[str] = mapped_column(String(64))
     target_last_edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -94,13 +106,17 @@ class ActionExecution(Base):
 
 
 class AuditLog(Base):
-    """Append-only. A database trigger rejects UPDATE and DELETE (see migration 0001)."""
+    """Append-only. A database trigger rejects UPDATE and DELETE; the one exception is
+    `purge_user_audit(user_id)`, which deleting an account calls (migration 0005)."""
 
     __tablename__ = "audit_log"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # The account the entry concerns; null for events without one (e.g. a failed sign-in).
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    actor: Mapped[str] = mapped_column(String(48))  # owner | agent:<name> | system | cron
+    # user (the account's person; "owner" before migration 0005) | agent:<name> | system | cron
+    actor: Mapped[str] = mapped_column(String(48))
     event: Mapped[str] = mapped_column(String(48))
     entity_type: Mapped[str | None] = mapped_column(String(32))
     entity_id: Mapped[str | None] = mapped_column(String(64))
@@ -108,12 +124,18 @@ class AuditLog(Base):
 
 
 class User(Base):
-    """The owner. LifeOS is single-owner; the table allows a future second account."""
+    """An account. Every run, proposal, audit entry and scheduled-job record belongs to one."""
 
     __tablename__ = "users"
+    __table_args__ = (
+        Index("uq_users_one_owner", "is_owner", unique=True, postgresql_where=text("is_owner")),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(254), unique=True)
+    # The deployment's owner (at most one): uses the Notion workspace configured in the
+    # environment, and is the account behind the bearer token and the scheduled jobs.
+    is_owner: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # Google's stable account ID; set on first Google sign-in.
     google_sub: Mapped[str | None] = mapped_column(String(64), unique=True)
     name: Mapped[str | None] = mapped_column(String(200))
@@ -135,10 +157,12 @@ class Session(Base):
 
 
 class CronRun(Base):
-    """One row per (job, local date): a retried or duplicated cron call can't start a second run."""
+    """One row per (account, job, local date): a retried or duplicated cron call can't start a
+    second run."""
 
     __tablename__ = "cron_runs"
 
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
     job: Mapped[str] = mapped_column(String(48), primary_key=True)
     local_date: Mapped[date] = mapped_column(Date, primary_key=True)
     run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agent_runs.id"))

@@ -6,15 +6,20 @@ from sqlalchemy.exc import DBAPIError
 
 from app.db.models import ActionProposal, AuditLog
 from app.execution.actions import ActionKind, CreateTask, MarkDone, SetDue, SetStatus
-from app.execution.proposals import ProposalError, ProposalService, utcnow
+from app.execution.proposals import ProposalError, ProposalService, expire_due, utcnow
 from app.permissions.policy import DEFAULT_MODES, Mode
+from tests.workflow_support import OWNER_ID
 
 DONE = MarkDone(page_id="task-1", completed_on=date(2026, 11, 1))
 
 
+def proposals(session, **kwargs) -> ProposalService:
+    return ProposalService(session, user_id=OWNER_ID, **kwargs)
+
+
 async def propose(session_factory, payload=DONE, kind=ActionKind.TASK_MARK_DONE, **kwargs):
     async with session_factory() as session, session.begin():
-        return await ProposalService(session).propose(kind, payload, reason="test", **kwargs)
+        return await proposals(session).propose(kind, payload, reason="test", **kwargs)
 
 
 async def test_propose_creates_a_pending_proposal_and_audits_it(session_factory):
@@ -36,7 +41,7 @@ async def test_identical_proposals_on_the_same_day_collapse(session_factory):
 async def test_the_same_suggestion_on_a_later_day_is_a_new_proposal(session_factory):
     first, _ = await propose(session_factory)
     async with session_factory() as session, session.begin():
-        later = ProposalService(session, clock=lambda: utcnow() + timedelta(days=2))
+        later = proposals(session, clock=lambda: utcnow() + timedelta(days=2))
         second, created = await later.propose(ActionKind.TASK_MARK_DONE, DONE, reason="again")
     assert created and second.id != first.id
 
@@ -49,7 +54,7 @@ async def test_payload_must_match_the_kind(session_factory):
 async def test_approval_with_valid_edits(session_factory):
     proposal, _ = await propose(session_factory)
     async with session_factory() as session, session.begin():
-        approved = await ProposalService(session).approve(
+        approved = await proposals(session).approve(
             proposal.id, edits={"completed_on": "2026-10-31"}, note="finished it yesterday"
         )
     assert approved.status == "approved"
@@ -62,7 +67,7 @@ async def test_edits_that_break_validation_or_retarget_are_refused(session_facto
     for edits in ({"completed_on": "not a date"}, {"page_id": "someone-else"}):
         async with session_factory() as session:
             with pytest.raises(ProposalError):
-                await ProposalService(session).approve(proposal.id, edits=edits)
+                await proposals(session).approve(proposal.id, edits=edits)
 
 
 async def test_cancelling_is_flagged_important(session_factory):
@@ -77,10 +82,10 @@ async def test_cancelling_is_flagged_important(session_factory):
 async def test_rejected_proposals_cannot_then_be_approved(session_factory):
     proposal, _ = await propose(session_factory)
     async with session_factory() as session, session.begin():
-        await ProposalService(session).reject(proposal.id, note="not done yet")
+        await proposals(session).reject(proposal.id, note="not done yet")
     async with session_factory() as session:
         with pytest.raises(ProposalError):
-            await ProposalService(session).approve(proposal.id)
+            await proposals(session).approve(proposal.id)
 
 
 async def test_expired_proposals_cannot_be_approved(session_factory):
@@ -88,9 +93,9 @@ async def test_expired_proposals_cannot_be_approved(session_factory):
     later = lambda: utcnow() + timedelta(hours=2)  # noqa: E731
     async with session_factory() as session:
         with pytest.raises(ProposalError):
-            await ProposalService(session, clock=later).approve(proposal.id)
+            await proposals(session, clock=later).approve(proposal.id)
     async with session_factory() as session, session.begin():
-        assert await ProposalService(session, clock=later).expire_due() == 1
+        assert await expire_due(session, clock=later) == 1
     async with session_factory() as session:
         assert (await session.get(ActionProposal, proposal.id)).status == "expired"
 
@@ -99,14 +104,14 @@ async def test_modes_off_and_suggest(session_factory):
     off = {**DEFAULT_MODES, ActionKind.TASK_CREATE: Mode.OFF}
     async with session_factory() as session:
         with pytest.raises(ProposalError):
-            await ProposalService(session, modes=off).propose(
+            await proposals(session, modes=off).propose(
                 ActionKind.TASK_CREATE, CreateTask(title="x"), reason="r"
             )
     proposal, _ = await propose(session_factory)
     suggest = {**DEFAULT_MODES, ActionKind.TASK_MARK_DONE: Mode.SUGGEST}
     async with session_factory() as session:
         with pytest.raises(ProposalError):
-            await ProposalService(session, modes=suggest).approve(proposal.id)
+            await proposals(session, modes=suggest).approve(proposal.id)
 
 
 async def test_audit_log_rejects_updates_and_deletes(session_factory):
@@ -124,22 +129,19 @@ async def test_due_edits_must_stay_in_the_same_week_and_month(session_factory):
     )  # fmt: skip
     proposal, _ = await propose(session_factory, move, ActionKind.TASK_SET_DUE)
     async with session_factory() as session, session.begin():
-        service = ProposalService(session)
+        service = proposals(session)
         with pytest.raises(ProposalError, match="same week and month"):
             await service.approve(proposal.id, edits={"new_due": "2026-11-10"})
     async with session_factory() as session, session.begin():
-        approved = await ProposalService(session).approve(
-            proposal.id, edits={"new_due": "2026-11-06"}
-        )
+        approved = await proposals(session).approve(proposal.id, edits={"new_due": "2026-11-06"})
         assert approved.edited_payload["new_due"] == "2026-11-06"
 
 
 async def test_expire_due_also_expires_unexecuted_approvals(session_factory):
     proposal, _ = await propose(session_factory)
     async with session_factory() as session, session.begin():
-        await ProposalService(session).approve(proposal.id)
+        await proposals(session).approve(proposal.id)
     async with session_factory() as session, session.begin():
-        later = ProposalService(session, clock=lambda: utcnow() + timedelta(days=2))
-        assert await later.expire_due() == 1
+        assert await expire_due(session, clock=lambda: utcnow() + timedelta(days=2)) == 1
     async with session_factory() as session:
         assert (await session.get(ActionProposal, proposal.id)).status == "expired"

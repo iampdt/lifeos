@@ -112,7 +112,12 @@ async def main() -> int:
 
     async with AsyncExitStack() as stack:
         services = await build_services(settings, stack)
-        runner = services.runner
+        context = await services.owner_context()
+        if context is None:
+            print("There is no owner account; create one with scripts.create_owner.",
+                  file=sys.stderr)  # fmt: skip
+            return 1
+        runner = context.runner
         if args.resume:
             view = await runner.get(uuid.UUID(args.resume))
         else:

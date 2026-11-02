@@ -50,6 +50,19 @@ an OAuth client whose redirect URI is `http://localhost:3000/api/v1/auth/google/
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `LIFEOS_PUBLIC_URL=http://localhost:3000`. Your
 account is linked on first sign-in when its email matches your Google account.
 
+### Upgrading an older development database
+
+Migration 0005 gives every existing run and proposal to the owner account. A database that has
+runs but no account (one used only through the bearer token) stops the upgrade with a hint:
+create the account at revision 0004 first, then upgrade and set its password.
+
+```bash
+docker compose exec db psql -U lifeos -d lifeos \
+  -c "INSERT INTO users (id, email) VALUES (gen_random_uuid(), 'you@example.com')"
+.venv/bin/alembic upgrade head
+.venv/bin/python -m scripts.create_owner you@example.com --reset
+```
+
 ## Configuration
 
 All settings come from environment variables, read from the repo-root `.env` in development.
@@ -88,7 +101,7 @@ differs from the live one before writing.
 | --- | --- |
 | `python -m scripts.notion_check --profile live` | Read-only check: integration, schema drift, view queries, week/month keys |
 | `python -m scripts.run_workflow evening_checkin --answer "…"` | Run a workflow from the terminal; it stops when it needs an answer you didn't give. Continue with `--resume RUN_ID --answer '{"approve": "all"}'`. `--writes` works only with `--profile sandbox` |
-| `python -m scripts.create_owner EMAIL [--reset]` | Create the owner account or set a new password (signs out every session) |
+| `python -m scripts.create_owner EMAIL [--reset]` | Create the owner account (the one that uses the workspace in `.env`; there is at most one), or set a new password for an account (signs out every session) |
 | `python -m scripts.smoke_test --api URL [--app URL --chat]` | Read-only checks against a deployment (needs `LIFEOS_API_TOKEN`) |
 | `python -m evals.run [--models …] [--suites …]` | Evaluation set against real models; writes `docs/evals/results.md` ([method](evals/README.md)) |
 

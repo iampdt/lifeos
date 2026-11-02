@@ -142,7 +142,7 @@ class ChatAgent:
         deps = self.deps
         run_id = uuid.uuid4()
         async with deps.session_factory() as db, db.begin():
-            db.add(AgentRun(id=run_id, workflow="chat", trigger="chat",
+            db.add(AgentRun(id=run_id, user_id=deps.user_id, workflow="chat", trigger="chat",
                             thread_id=str(run_id), status="running"))  # fmt: skip
         yield {"type": "run", "run_id": str(run_id)}
 

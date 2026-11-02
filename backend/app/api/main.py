@@ -1,14 +1,17 @@
 """FastAPI application: `uvicorn app.api.main:app` (docs/api.md).
 
 Services (Notion client, database, LLM router, LangGraph checkpointer) are built once in the
-lifespan. Tests pass ready-made `Services` to `create_app` instead.
+lifespan; each account's workflow dependencies and runner come from `contexts`. Tests pass
+ready-made `Services` to `create_app` instead.
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import datetime
+from functools import partial
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Request
@@ -16,6 +19,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.cron import router as cron_router
@@ -24,6 +29,7 @@ from app.api.routes import router
 from app.auth.google import GoogleOIDC
 from app.auth.sessions import RateLimiter
 from app.core.config import Settings, env_values, get_settings
+from app.db.models import User
 from app.db.session import make_engine, make_session_factory
 from app.demo.setup import demo_notion, demo_specs, demo_user, ensure_demo_database, reset_demo
 from app.llm.factory import build_router
@@ -31,16 +37,18 @@ from app.notion.client import NotionClient
 from app.notion.errors import NotionError
 from app.notion.mapping import load_mapping
 from app.notion.rate_limiter import AsyncTokenBucket
-from app.workflows.deps import WorkflowDeps
-from app.workflows.runner import RunStateError, UnknownWorkflow, WorkflowRunner
+from app.workflows.contexts import Contexts, UserContext
+from app.workflows.deps import WorkflowDeps, utcnow
+from app.workflows.runner import RunStateError, UnknownWorkflow
 
 
 @dataclass
 class Services:
     settings: Settings
-    deps: WorkflowDeps
-    runner: WorkflowRunner
-    # Architecture §9: at most 5 sign-in attempts a minute (one process, one owner).
+    session_factory: async_sessionmaker[AsyncSession]
+    contexts: Contexts
+    clock: Callable[[], datetime] = utcnow
+    # Architecture §9: at most 5 password sign-in attempts a minute (one process).
     login_limiter: RateLimiter = field(default_factory=lambda: RateLimiter(5, 60))
     # Demo only: how often visitors may open a session or reset the shared workspace.
     demo_limiter: RateLimiter = field(default_factory=lambda: RateLimiter(30, 60))
@@ -48,23 +56,34 @@ class Services:
     oauth_limiter: RateLimiter = field(default_factory=lambda: RateLimiter(30, 60))
     google: GoogleOIDC | None = None  # set when Google sign-in is configured
 
+    async def owner_context(self) -> UserContext | None:
+        """The owner account's context: scheduled jobs and scripts act as the owner."""
+        async with self.session_factory() as db:
+            owner_id = await db.scalar(select(User.id).where(User.is_owner))
+        return self.contexts.for_user(owner_id, is_owner=True) if owner_id else None
+
 
 async def build_demo_services(settings: Settings, stack: AsyncExitStack) -> Services:
     """The public demo: same app, in-memory sample workspace, in-memory run checkpoints."""
     ensure_demo_database(settings.database_url)
     engine = make_engine(settings.database_url)
     stack.push_async_callback(engine.dispose)
-    deps = WorkflowDeps(
-        make_session_factory(engine),
+    session_factory = make_session_factory(engine)
+    make_deps = partial(
+        WorkflowDeps,
+        session_factory,
         demo_notion(),
         demo_specs(settings.notion_mapping_path),
         build_router(settings),
         writes_enabled=True,  # writes go to the in-memory workspace
         tz=ZoneInfo(settings.timezone),
     )
-    await reset_demo(deps)
-    await demo_user(deps.session_factory)
-    return Services(settings, deps, WorkflowRunner(deps, InMemorySaver()))
+    contexts = Contexts(lambda user_id: make_deps(user_id=user_id), InMemorySaver())
+    user = await demo_user(session_factory)
+    context = contexts.for_user(user.id, is_owner=True)
+    assert context is not None
+    await reset_demo(context.deps)
+    return Services(settings, session_factory, contexts)
 
 
 async def build_services(settings: Settings, stack: AsyncExitStack) -> Services:
@@ -87,15 +106,18 @@ async def build_services(settings: Settings, stack: AsyncExitStack) -> Services:
         AsyncPostgresSaver.from_conn_string(settings.checkpoint_url)
     )
     await saver.setup()  # creates the checkpoint tables on first run
-    deps = WorkflowDeps(
-        make_session_factory(engine),
+    session_factory = make_session_factory(engine)
+    make_deps = partial(
+        WorkflowDeps,
+        session_factory,
         client,
         specs,
         build_router(settings),
         writes_enabled=settings.lifeos_writes_enabled,
         tz=ZoneInfo(settings.timezone),
     )
-    return Services(settings, deps, WorkflowRunner(deps, saver), google=google_client(settings))
+    contexts = Contexts(lambda user_id: make_deps(user_id=user_id), saver)
+    return Services(settings, session_factory, contexts, google=google_client(settings))
 
 
 def google_client(settings: Settings) -> GoogleOIDC | None:
