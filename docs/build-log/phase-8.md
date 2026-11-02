@@ -42,6 +42,8 @@ with writes off.
 | Tasks readable from the live workspace | ok |
 | Web app serves and proxies `/api` to the API | ok |
 | Chat streams through Vercel's rewrite | ok: `run` 0.2 s, `tool` 1.5 s, answer 2.8 s |
+| Scheduled jobs: GitHub Actions → signed call → API (`expire_proposals`, run by hand) | ok: `{"job":"expire_proposals","status":"done"}` |
+| Owner sign-in on the deployed web app | ok |
 
 Issues found on the way:
 
@@ -61,5 +63,5 @@ whitespace in pasted secrets.
 
 ## Next
 
-Scheduled jobs go live once the cron secret is in GitHub; then writes are switched on.
-After that: Phase 5.
+Switch writes on (`LIFEOS_WRITES_ENABLED` in `render.yaml`, so a Blueprint sync can't revert it),
+then Phase 5.
