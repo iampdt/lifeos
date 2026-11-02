@@ -9,7 +9,8 @@ import { ApprovalsSheet } from "@/components/approvals-sheet";
 import { DemoBanner } from "@/components/demo-banner";
 import { useSession, useSignOut } from "@/components/session";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { useNotionConnection } from "@/components/notion-connection";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
@@ -92,18 +93,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 }
 
 function NoWorkspace() {
+  const notion = useNotionConnection();
+  const connected = notion.data?.connection?.status === "active";
   return (
     <Card className="mx-auto max-w-lg">
       <CardHeader>
         <CardTitle>No Notion workspace yet</CardTitle>
         <CardDescription>
-          Your account is set up, but it isn&apos;t connected to a Notion workspace, so there&apos;s
-          nothing to plan or review yet. Connecting your own workspace is coming soon.
+          {connected
+            ? "Your Notion is connected. Choosing which of its databases LifeOS works with comes next."
+            : notion.data?.available
+              ? "Your account is set up. Connect your Notion workspace to get started."
+              : "Your account is set up, but it isn't connected to a Notion workspace, so there's nothing to plan or review yet. Connecting your own workspace is coming soon."}
         </CardDescription>
       </CardHeader>
-      <CardContent className="text-sm text-muted-foreground">
-        You can delete your account at any time in{" "}
-        <Link href="/settings" className="underline underline-offset-4">Settings</Link>.
+      <CardContent className="flex flex-col items-start gap-3 text-sm text-muted-foreground">
+        {notion.data?.available && !connected && (
+          <a href="/api/v1/notion/connect" className={buttonVariants()}>Connect Notion</a>
+        )}
+        <p>
+          You can delete your account at any time in{" "}
+          <Link href="/settings" className="underline underline-offset-4">Settings</Link>.
+        </p>
       </CardContent>
     </Card>
   );

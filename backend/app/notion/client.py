@@ -4,6 +4,9 @@ Responsibilities: authentication headers, rate limiting, retries with backoff, p
 typed errors. The two write methods (`update_page`, `create_page`) are called only by the
 executor, after a proposal has been approved (architecture §3.4). There is no archive or delete
 method.
+
+The token is either fixed (an internal integration) or comes from a `TokenSource` (an account's
+OAuth connection), which is asked once for a fresh token when Notion answers 401.
 """
 
 from __future__ import annotations
@@ -13,11 +16,17 @@ import logging
 import random
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
-from app.notion.errors import NotionError, NotionRateLimited, NotionUnavailable, error_from_response
+from app.notion.errors import (
+    NotionError,
+    NotionRateLimited,
+    NotionUnauthorized,
+    NotionUnavailable,
+    error_from_response,
+)
 from app.notion.rate_limiter import AsyncTokenBucket
 
 logger = logging.getLogger("lifeos.notion")
@@ -26,10 +35,29 @@ DEFAULT_BASE_URL = "https://api.notion.com/v1"
 DEFAULT_VERSION = "2025-09-03"
 
 
+class TokenSource(Protocol):
+    async def token(self) -> str: ...
+
+    async def refresh(self, rejected: str) -> str | None:
+        """A new token after Notion rejected `rejected`, or None if there is none."""
+        ...
+
+
+class StaticToken:
+    def __init__(self, token: str) -> None:
+        self._token = token
+
+    async def token(self) -> str:
+        return self._token
+
+    async def refresh(self, rejected: str) -> str | None:
+        return None
+
+
 class NotionClient:
     def __init__(
         self,
-        token: str,
+        token: str | TokenSource,
         *,
         base_url: str = DEFAULT_BASE_URL,
         notion_version: str = DEFAULT_VERSION,
@@ -42,13 +70,10 @@ class NotionClient:
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         rng: Callable[[], float] = random.random,
     ) -> None:
+        self._tokens = StaticToken(token) if isinstance(token, str) else token
         self._http = httpx.AsyncClient(
             base_url=base_url,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Notion-Version": notion_version,
-                "Content-Type": "application/json",
-            },
+            headers={"Notion-Version": notion_version, "Content-Type": "application/json"},
             timeout=httpx.Timeout(20.0, connect=5.0),
             transport=transport,
         )
@@ -90,12 +115,16 @@ class NotionClient:
         raised and the executor's find-or-create step resolves it on the next attempt.
         """
         deadline = time.monotonic() + self._deadline_seconds
+        token = await self._tokens.token()
+        refreshed = False
         for attempt in range(1, self._max_attempts + 1):
             await self._limiter.acquire()
             self.request_count += 1
             started = time.monotonic()
             try:
-                response = await self._http.request(method, path, json=json)
+                response = await self._http.request(
+                    method, path, json=json, headers={"Authorization": f"Bearer {token}"}
+                )
             except httpx.TimeoutException as exc:
                 error: NotionError = NotionUnavailable(f"Timed out calling Notion: {exc!r}")
             except httpx.TransportError as exc:
@@ -117,6 +146,13 @@ class NotionClient:
                 except ValueError:
                     body = None
                 error = error_from_response(response.status_code, body, response.headers)
+                if isinstance(error, NotionUnauthorized) and not refreshed:
+                    # Notion rejected the token before doing any work, so retrying is safe.
+                    refreshed = True
+                    fresh = await self._tokens.refresh(token)
+                    if fresh is not None:
+                        token = fresh
+                        continue
 
             safe_to_retry = error.retryable and (idempotent or isinstance(error, NotionRateLimited))
             if not safe_to_retry or attempt == self._max_attempts:
@@ -158,6 +194,21 @@ class NotionClient:
 
     async def get_self(self) -> dict[str, Any]:
         return await self._request("GET", "users/me")
+
+    async def search_data_sources(self, *, page_size: int = 100) -> AsyncIterator[dict[str, Any]]:
+        """Every data source the integration can see (shared with it, or under shared pages)."""
+        body: dict[str, Any] = {
+            "filter": {"property": "object", "value": "data_source"},
+            "page_size": page_size,
+        }
+        while True:
+            data = await self._request("POST", "search", json=body)
+            for item in data.get("results", []):
+                yield item
+            cursor = data.get("next_cursor")
+            if not data.get("has_more") or not cursor:
+                return
+            body = {**body, "start_cursor": cursor}
 
     async def get_database(self, database_id: str) -> dict[str, Any]:
         return await self._request("GET", f"databases/{database_id}")

@@ -93,3 +93,7 @@ replaced. Dates are when the decision was made.
 | I32 | Workspace before Notion OAuth | The environment's workspace belongs to the owner account (`is_owner`, at most one), which the bearer token and scheduled jobs act as; other accounts have no workspace until they connect one |
 | I33 | Per-account contexts | Each account's dependencies and compiled graphs are built on first use and cached, rather than passing dependencies through graph config, so the graph code stays unchanged |
 | I34 | Deleting audit entries | Account deletion purges that account's entries through `purge_user_audit`, which the append-only trigger allows only for the account being purged and only during the call |
+| I35 | Token storage | Notion tokens encrypted with Fernet (authenticated, so a wrong key or tampering fails loudly); `LIFEOS_ENCRYPTION_KEY` accepts several keys for rotation |
+| I36 | Token refresh | Refresh on a 401 (and before a stated expiry), under a row lock: Notion rotates refresh tokens, so two concurrent refreshes would lock the account out. Only Notion refusing the refresh asks the user to reconnect |
+| I37 | Connection attempts | Tied to the account that started them, checked against the session on return, so a forged callback can't attach a workspace to someone else's account |
+

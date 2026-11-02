@@ -50,7 +50,7 @@ cookie is first-party. Scheduled jobs call the backend directly with a signed re
 | `execution/` | Action kinds and payloads, proposal lifecycle, executor, audit log |
 | `permissions/` | Field-level write allowlist and per-kind permission modes |
 | `services/` | Domain rules, calendar (weeks, months, timezone), period lookup, prompt-safe context |
-| `notion/` | API client, property codecs and encoders, mapping, schema drift, view queries, repositories |
+| `notion/` | API client, property codecs and encoders, mapping, schema drift, view queries, repositories, OAuth and accounts' connections (`oauth.py`, `connections.py`) |
 | `llm/` | Provider protocol, Gemini provider, mock provider, router with fallback and budget |
 | `db/` | SQLAlchemy models, engine and database URL handling |
 | `core/` | Settings from the environment |
@@ -274,7 +274,8 @@ account (`user_id`), and every query filters on it.
 | `action_executions` | One row per execution attempt and its outcome |
 | `audit_log` | Append-only (a trigger rejects `UPDATE` and `DELETE`, except through `purge_user_audit` when an account is deleted): account, actor, event, entity, details. IDs and kinds only, no page contents |
 | `users`, `sessions` | Accounts (Google subject ID or password hash; at most one `is_owner`); sessions store a SHA-256 of the cookie token and a CSRF token |
-| `oauth_states` | Single-use sign-in attempts: state, nonce, PKCE verifier, expiry |
+| `oauth_states` | Single-use sign-in and connection attempts: state, nonce and PKCE verifier (Google), account (Notion), expiry |
+| `notion_connections` | An account's Notion workspace connection: workspace, bot, access and refresh tokens (encrypted), status (`active` or `needs_reconnect`) |
 | `cron_runs` | One row per (account, job, local date) |
 | `checkpoint*` | LangGraph checkpoints, created and migrated by the checkpointer itself |
 
@@ -285,8 +286,12 @@ Productivity records stay in Notion. Postgres holds only state LifeOS owns. Migr
 
 - **Secrets** only in environment variables; `.env` is git-ignored and `.env.example` documents
   every variable.
-- **Notion:** an internal integration connected only to the Life OS pages (read, update and
-  insert content; no user or comment access).
+- **Notion:** the owner's workspace uses an internal integration connected only to the Life OS
+  pages (read, update and insert content; no user or comment access). Accounts connect their own
+  workspace through a public integration with OAuth; its access and refresh tokens are encrypted
+  at rest (Fernet, `LIFEOS_ENCRYPTION_KEY`, rotatable), refreshed under a row lock because each
+  refresh invalidates the previous refresh token, and revoked at Notion on disconnect or account
+  deletion. A connection attempt is tied to the account that started it.
 - **Authentication:** Google sign-in (authorisation code with PKCE, state and nonce; the ID token
   is verified against Google's keys) where configured, otherwise argon2id passwords; the session
   cookie is `HttpOnly; SameSite=Lax` and

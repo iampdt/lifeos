@@ -28,7 +28,7 @@ Every error has the same shape:
 | 401 | `unauthorized`, `invalid_credentials`, `bad_signature` |
 | 403 | `csrf_failed`, `password_sign_in_disabled`, `session_required`, `demo_account` |
 | 404 | `unknown_workflow`, `unknown_job`, `http_error` |
-| 409 | `run_state` (run not found or not waiting), `run_owned` (decide it through its run), `no_workspace` |
+| 409 | `run_state` (run not found or not waiting), `run_owned` (decide it through its run), `no_workspace`, `notion_reconnect`, `not_connected` |
 | 422 | `invalid_request`, `confirmation_mismatch` |
 | 429 | `rate_limited` (sign-in) |
 | 502 | `notion_<code>`, `run_failed` |
@@ -48,7 +48,7 @@ Every error has the same shape:
 | `GET /auth/google/callback` | Google's redirect target. On success sets the cookie and redirects to `/`; otherwise redirects to `/login?error=<code>`: `cancelled`, `expired`, `exchange_failed`, `invalid_token`, `email_unverified`, `signup_closed`, `account_conflict` |
 | `POST /auth/login` | Body `{email, password}`. Returns `{email, csrf_token}` and sets the cookie. Refused with 403 `password_sign_in_disabled` when Google sign-in is configured |
 | `GET /auth/me` | `{via, email, name, csrf_token, owner, workspace}`; `workspace` is false until the account has a workspace |
-| `POST /account/delete` | Body `{confirm}`: the account's email address. Deletes the account and everything stored for it (sessions, runs and their checkpoints, proposals, executions, scheduled-job records, audit entries); Notion is never touched. Browser sessions only; refused for the demo account |
+| `POST /account/delete` | Body `{confirm}`: the account's email address. Deletes the account and everything stored for it (its Notion connection, revoked at Notion too; sessions, runs and their checkpoints, proposals, executions, scheduled-job records, audit entries); Notion content is never touched. Browser sessions only; refused for the demo account |
 | `POST /auth/logout` | Revokes the session and clears the cookie |
 
 ### Workflow runs
@@ -139,6 +139,20 @@ Outcomes: `verified`, `noop`, `mismatch`, `stale`, `failed`, `blocked` (writes o
 | `GET /tasks?view=active\|today\|overdue\|inbox\|next7` | Tasks from the corresponding view |
 | `GET /settings` | Notion profile, write switch, timezone, today's date in that timezone, model chains, tokens used today, permission modes |
 | `GET /notion/status` | Integration name, workspace, and per data source: reachable, schema matches, drift details |
+
+### Notion connection
+
+An account's own Notion workspace, connected with OAuth. Available when the deployment has a
+Notion public integration configured; otherwise these routes return 404 and
+`/notion/connection` reports `available: false`.
+
+| Method and path | Description |
+| --- | --- |
+| `GET /notion/connect` | Browser sessions only. Records a single-use attempt for the account (10 minutes) and redirects to Notion's consent page |
+| `GET /notion/callback` | Notion's redirect target. Checks that the attempt belongs to the signed-in account, exchanges the code and stores the tokens encrypted. Redirects to `/settings?notion=connected`, or `/settings?notion_error=<code>`: `cancelled`, `expired`, `wrong_account`, `exchange_failed` |
+| `GET /notion/connection` | `{available, connection}`; `connection` is null or `{workspace_id, workspace_name, workspace_icon, status, connected_at, from_template}`, with `status` `active` or `needs_reconnect` |
+| `GET /notion/data-sources` | `{data_sources: [{id, title, database_id, url}], truncated}`: what the connection can see (at most 200). 409 `notion_reconnect` when there's no usable connection |
+| `POST /notion/disconnect` | Revokes the token at Notion (best effort) and deletes it. Returns `{status, revoked}`; 409 `not_connected` when there is none |
 
 ### Scheduled jobs
 

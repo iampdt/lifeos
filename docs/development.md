@@ -74,6 +74,7 @@ All settings come from environment variables, read from the repo-root `.env` in 
 | `LIFEOS_WRITES_ENABLED` | Off by default. When off, approvals are recorded but nothing is written |
 | `LIFEOS_ENV` | `production` hides the API docs and forces Secure cookies |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `LIFEOS_PUBLIC_URL` | All three set: Google sign-in only; otherwise the password form |
+| `NOTION_OAUTH_CLIENT_ID`, `NOTION_OAUTH_CLIENT_SECRET`, `LIFEOS_ENCRYPTION_KEY` | With `LIFEOS_PUBLIC_URL`: accounts can connect their own Notion. The tests cover the flow against a fake Notion; `NOTION_BASE_URL` points the app at a stand-in for a manual walkthrough |
 | `LIFEOS_OPEN_SIGNUP` | Off by default. When on, new Google users get an account |
 
 ## Tests

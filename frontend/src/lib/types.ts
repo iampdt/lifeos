@@ -147,3 +147,20 @@ export type NotionStatus = {
     drift?: { field: string; property: string; problem: string; detail: string; blocking: boolean }[];
   }[];
 };
+
+export type NotionConnectionView = {
+  available: boolean;
+  connection: {
+    workspace_id: string;
+    workspace_name: string | null;
+    workspace_icon: string | null;
+    status: "active" | "needs_reconnect";
+    connected_at: string;
+    from_template: boolean;
+  } | null;
+};
+
+export type DataSourceList = {
+  data_sources: { id: string; title: string; database_id: string | null; url: string | null }[];
+  truncated: boolean;
+};

@@ -104,6 +104,27 @@ From the next deploy the sign-in page offers only **Continue with Google**. The 
 is linked on first sign-in when the Google account's email matches it; new accounts are refused
 while `LIFEOS_OPEN_SIGNUP` is off.
 
+### 9. Connecting Notion (optional)
+
+Lets accounts connect their own Notion workspace (multi-user step 9.3).
+
+1. In Notion's developer portal (https://app.notion.com/developers/connections), create a
+   **public** connection. Set the installation scope to **Any workspace** (it can't be changed
+   later) and add the redirect URI `https://<your-app>.vercel.app/api/v1/notion/callback`.
+   LifeOS needs to read, update and insert content; it doesn't need comments or user
+   information.
+2. Submit the connection for review. Notion shows the authorisation URL once it has been
+   submitted; LifeOS builds the same URL from the client ID.
+3. From the **Configuration** tab, set `NOTION_OAUTH_CLIENT_ID` and `NOTION_OAUTH_CLIENT_SECRET`
+   on Render (dashboard).
+4. Generate an encryption key and set it as `LIFEOS_ENCRYPTION_KEY` on Render:
+   `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
+   Keep a copy somewhere safe: without it, stored tokens can't be read and every account has to
+   connect again. To rotate it, set `new_key,old_key`.
+
+From the next deploy, Settings shows **Your Notion** with **Connect Notion**. The owner's routines
+keep using the workspace configured by `NOTION_TOKEN`.
+
 ## Public demo
 
 The Blueprint also defines `lifeos-demo-api`: the same image with `LIFEOS_DEMO_MODE=true`, an

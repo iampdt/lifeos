@@ -45,17 +45,22 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 30.0
     llm_daily_token_budget: int = 300_000
 
-    # Bearer token for the API until session auth arrives with the frontend (Phase 6).
-    # Unset means every API route refuses requests (fail closed).
+    # Bearer token for scripts; it acts as the owner account. Unset: bearer requests are refused.
     lifeos_api_token: SecretStr | None = None
     # Sign in with Google (OpenID Connect). LIFEOS_PUBLIC_URL is the web app's origin; Google
     # redirects to {LIFEOS_PUBLIC_URL}/api/v1/auth/google/callback.
     google_client_id: str | None = None
     google_client_secret: SecretStr | None = None
     lifeos_public_url: str | None = None
-    # New accounts from Google sign-in. Off until data is separated per user (multi-user 9.2);
-    # while off, Google sign-in only links to accounts that already exist (matched by email).
+    # New accounts from Google sign-in. While off, Google sign-in only links to accounts that
+    # already exist (matched by email).
     lifeos_open_signup: bool = False
+    # Connect Notion (a public integration with OAuth). Notion redirects to
+    # {LIFEOS_PUBLIC_URL}/api/v1/notion/callback. Stored tokens are encrypted with
+    # LIFEOS_ENCRYPTION_KEY: one or more comma-separated Fernet keys, the first one encrypting.
+    notion_oauth_client_id: str | None = None
+    notion_oauth_client_secret: SecretStr | None = None
+    lifeos_encryption_key: SecretStr | None = None
 
     # Owner login (Phase 6). Secure cookies need HTTPS; set false only for local http dev.
     lifeos_cookie_secure: bool = True
@@ -93,6 +98,16 @@ class Settings(BaseSettings):
     @property
     def google_sign_in(self) -> bool:
         return bool(self.google_client_id and self.google_client_secret and self.lifeos_public_url)
+
+    @property
+    def notion_oauth(self) -> bool:
+        return bool(
+            self.notion_oauth_client_id
+            and self.notion_oauth_client_secret
+            and self.lifeos_encryption_key
+            and self.lifeos_public_url
+            and not self.lifeos_demo_mode
+        )
 
     @property
     def password_sign_in(self) -> bool:

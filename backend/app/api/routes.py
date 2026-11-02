@@ -218,9 +218,9 @@ async def logout(request: Request, response: Response) -> dict[str, str]:
 async def delete_my_account(
     body: DeleteAccount, principal: CurrentUser, request: Request, response: Response
 ) -> dict[str, str]:
-    """Deletes the account and everything LifeOS stored for it: sessions, runs and their
-    checkpoints, proposals, executions, scheduled-job records and audit entries. Notion content
-    is never touched."""
+    """Deletes the account and everything LifeOS stored for it: its Notion connection (revoked
+    at Notion too), sessions, runs and their checkpoints, proposals, executions, scheduled-job
+    records and audit entries. Notion content is never touched."""
     svc = services(request)
     if svc.settings.lifeos_demo_mode:
         raise ApiError(403, "demo_account", "the shared demo account can't be deleted")
@@ -228,6 +228,8 @@ async def delete_my_account(
         raise ApiError(403, "session_required", "delete the account from a signed-in browser")
     if normalize_email(body.confirm) != principal.email:
         raise ApiError(422, "confirmation_mismatch", "type the account's email address to confirm")
+    if svc.connections is not None:
+        await svc.connections.disconnect(principal.user_id)  # revokes LifeOS's access in Notion
     async with svc.session_factory() as db:
         threads = await account_threads(db, principal.user_id)
     for thread_id in threads:

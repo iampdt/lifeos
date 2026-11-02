@@ -47,7 +47,8 @@ services:
       - key: LIFEOS_CRON_SECRET
         generateValue: true
       # Google sign-in turns on once GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are also set in the
-      # dashboard (see docs/deployment.md); until then the password form stays.
+      # dashboard (see docs/deployment.md); until then the password form stays. Connecting Notion
+      # turns on with NOTION_OAUTH_CLIENT_ID, NOTION_OAUTH_CLIENT_SECRET and LIFEOS_ENCRYPTION_KEY.
       - key: LIFEOS_PUBLIC_URL
         value: https://lifeos-five-tau.vercel.app
 

@@ -178,8 +178,34 @@ class OAuthState(Base):
 
     state: Mapped[str] = mapped_column(String(64), primary_key=True)
     provider: Mapped[str] = mapped_column(String(16))  # google | notion
-    code_verifier: Mapped[str] = mapped_column(String(128))
-    nonce: Mapped[str] = mapped_column(String(64))
+    # PKCE verifier and OpenID nonce (Google only).
+    code_verifier: Mapped[str | None] = mapped_column(String(128))
+    nonce: Mapped[str | None] = mapped_column(String(64))
+    # The account a connection attempt belongs to (Notion); its callback must come from it.
     user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class NotionConnection(Base):
+    """An account's connection to its Notion workspace (one per account for now), from Notion's
+    OAuth flow. The tokens are encrypted with LIFEOS_ENCRYPTION_KEY (app/core/crypto.py)."""
+
+    __tablename__ = "notion_connections"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(64))
+    workspace_name: Mapped[str | None] = mapped_column(String(200))
+    workspace_icon: Mapped[str | None] = mapped_column(String(500))  # an emoji or a URL
+    bot_id: Mapped[str] = mapped_column(String(64))
+    access_token: Mapped[str] = mapped_column(Text)
+    refresh_token: Mapped[str | None] = mapped_column(Text)
+    # Only when Notion says how long the access token lasts; otherwise a 401 triggers a refresh.
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The starter template Notion duplicated during authorisation, if any.
+    duplicated_template_id: Mapped[str | None] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16))  # active | needs_reconnect
+    connected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    refreshed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

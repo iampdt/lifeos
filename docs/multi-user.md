@@ -47,12 +47,21 @@ tasks, with nothing in the code that only makes sense for one person's setup.
 
 ## Notion connection
 
-- **Connect Notion** starts Notion's OAuth flow with a state value; the callback exchanges the
-  code, stores the access and refresh tokens encrypted at rest (`LIFEOS_ENCRYPTION_KEY`), and
-  records the workspace name and ID. A `401` from Notion triggers one refresh; a failed refresh
-  marks the connection as needing reconnection.
-- One workspace per user in this phase. **Disconnect** deletes the stored tokens.
-- Each user's Notion client has its own rate limiter, so one user's traffic can't slow another's.
+- **Connect Notion** starts Notion's OAuth flow with a state value tied to the account; the
+  callback checks that the signed-in account started the attempt, exchanges the code, stores the
+  access and refresh tokens encrypted at rest (`LIFEOS_ENCRYPTION_KEY`), and records the
+  workspace name and ID. The authorising user's details in Notion's response aren't kept.
+- A `401` from Notion triggers one refresh (and an expiry, if Notion ever sends one, triggers an
+  early refresh). Each refresh returns a new refresh token and invalidates the old one, so
+  refreshes are serialised by a row lock and a request that finds the token already refreshed
+  uses the new one. Notion refusing the refresh marks the connection `needs_reconnect`; a
+  network failure leaves it as it was.
+- One workspace per user in this phase. **Disconnect** revokes the token at Notion and deletes
+  it; so does deleting the account.
+- Each user's Notion client has its own rate limiter, kept across requests, so one user's
+  traffic can't slow another's.
+- Until 9.4 maps a connected workspace's databases, a connection shows which databases it can
+  see, and the account's routines don't run yet.
 
 ## Generic workspace model
 
@@ -111,10 +120,10 @@ whose local time has reached a scheduled routine that hasn't run today, the API 
 - Privacy policy and terms pages describe what is stored (encrypted tokens, run and proposal
   metadata, proposal payloads with task titles), the Gemini free-tier terms, and deletion.
 - **Owner setup:** a Google Cloud OAuth client (web application; consent screen with the three
-  basic scopes, published), a Notion public integration ("any workspace", redirect URI, template
+  basic scopes, published), a Notion public connection ("any workspace", redirect URI, template
   URL, submitted for review), and the new secrets on Render: `GOOGLE_CLIENT_ID`,
   `GOOGLE_CLIENT_SECRET`, `NOTION_OAUTH_CLIENT_ID`, `NOTION_OAUTH_CLIENT_SECRET`,
-  `LIFEOS_ENCRYPTION_KEY`.
+  `LIFEOS_ENCRYPTION_KEY` (see [deployment.md](deployment.md) §8 and §9).
 
 ## Delivery
 
@@ -122,7 +131,7 @@ whose local time has reached a scheduled routine that hasn't run today, the API 
 | --- | --- | --- |
 | 9.1 | Google sign-in and account linking; passwords only where Google isn't configured | Done |
 | 9.2 | Multi-tenancy: `user_id` everywhere, per-account contexts, isolation tests, delete account | Done |
-| 9.3 | Notion OAuth connect, encrypted tokens with refresh, disconnect | |
+| 9.3 | Notion OAuth connect, encrypted tokens with refresh, disconnect | Done |
 | 9.4 | Generic workspace model: modules, mappings, onboarding UI, template, generic habits, per-user rules | |
 | 9.5 | AI allowance, own-key option, disclosure and consent | |
 | 9.6 | Per-user scheduling | |

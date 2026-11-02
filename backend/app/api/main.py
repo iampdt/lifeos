@@ -25,17 +25,21 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.cron import router as cron_router
 from app.api.errors import ApiError, error_body
+from app.api.notion_connect import router as notion_connect_router
 from app.api.routes import router
 from app.auth.google import GoogleOIDC
 from app.auth.sessions import RateLimiter
 from app.core.config import Settings, env_values, get_settings
+from app.core.crypto import TokenCipher
 from app.db.models import User
 from app.db.session import make_engine, make_session_factory
 from app.demo.setup import demo_notion, demo_specs, demo_user, ensure_demo_database, reset_demo
 from app.llm.factory import build_router
 from app.notion.client import NotionClient
+from app.notion.connections import NotionConnections
 from app.notion.errors import NotionError
 from app.notion.mapping import load_mapping
+from app.notion.oauth import NotionOAuth
 from app.notion.rate_limiter import AsyncTokenBucket
 from app.workflows.contexts import Contexts, UserContext
 from app.workflows.deps import WorkflowDeps, utcnow
@@ -55,6 +59,7 @@ class Services:
     reset_limiter: RateLimiter = field(default_factory=lambda: RateLimiter(2, 60))
     oauth_limiter: RateLimiter = field(default_factory=lambda: RateLimiter(30, 60))
     google: GoogleOIDC | None = None  # set when Google sign-in is configured
+    connections: NotionConnections | None = None  # set when Notion OAuth is configured
 
     async def owner_context(self) -> UserContext | None:
         """The owner account's context: scheduled jobs and scripts act as the owner."""
@@ -117,7 +122,13 @@ async def build_services(settings: Settings, stack: AsyncExitStack) -> Services:
         tz=ZoneInfo(settings.timezone),
     )
     contexts = Contexts(lambda user_id: make_deps(user_id=user_id), saver)
-    return Services(settings, session_factory, contexts, google=google_client(settings))
+    return Services(
+        settings,
+        session_factory,
+        contexts,
+        google=google_client(settings),
+        connections=notion_connections(settings, session_factory),
+    )
 
 
 def google_client(settings: Settings) -> GoogleOIDC | None:
@@ -128,6 +139,30 @@ def google_client(settings: Settings) -> GoogleOIDC | None:
         settings.google_client_id,
         settings.google_client_secret.get_secret_value(),
         f"{settings.lifeos_public_url.rstrip('/')}/api/v1/auth/google/callback",
+    )
+
+
+def notion_connections(
+    settings: Settings, session_factory: async_sessionmaker[AsyncSession]
+) -> NotionConnections | None:
+    if not settings.notion_oauth:
+        return None
+    assert settings.notion_oauth_client_id and settings.notion_oauth_client_secret
+    assert settings.lifeos_encryption_key and settings.lifeos_public_url
+    oauth = NotionOAuth(
+        settings.notion_oauth_client_id,
+        settings.notion_oauth_client_secret.get_secret_value(),
+        f"{settings.lifeos_public_url.rstrip('/')}/api/v1/notion/callback",
+        base_url=settings.notion_base_url,
+        notion_version=settings.notion_version,
+    )
+    return NotionConnections(
+        session_factory,
+        TokenCipher(settings.lifeos_encryption_key.get_secret_value()),
+        oauth,
+        base_url=settings.notion_base_url,
+        notion_version=settings.notion_version,
+        requests_per_second=settings.notion_requests_per_second,
     )
 
 
@@ -148,6 +183,7 @@ def create_app(services: Services | None = None) -> FastAPI:
         app.state.services = services
     app.include_router(router, prefix="/api/v1")
     app.include_router(cron_router, prefix="/api/v1")
+    app.include_router(notion_connect_router, prefix="/api/v1")
 
     @app.exception_handler(ApiError)
     async def _api_error(request: Request, exc: ApiError) -> JSONResponse:

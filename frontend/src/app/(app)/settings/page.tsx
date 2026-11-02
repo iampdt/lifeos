@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { useSettings } from "@/components/app-shell";
+import { NotionConnectionCard } from "@/components/notion-connection";
 import { type Me, useSession } from "@/components/session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -139,6 +140,7 @@ export default function SettingsPage() {
           </Card>
         </>
       )}
+      {session && !s?.demo && <NotionConnectionCard owner={session.owner} />}
       {session && deletable && <AccountCard me={session} />}
     </div>
   );
@@ -154,8 +156,8 @@ function AccountCard({ me }: { me: Me }) {
       </CardHeader>
       <CardContent className="flex flex-col items-start gap-3 text-sm">
         <p className="text-muted-foreground">
-          Deleting your account removes everything LifeOS stored for it: runs, proposals and their
-          history, and sessions. Nothing in Notion is changed.
+          Deleting your account removes everything LifeOS stored for it: its Notion connection,
+          runs, proposals and their history, and sessions. Nothing in Notion is changed.
         </p>
         <Button variant="destructive" onClick={() => setOpen(true)}>Delete account</Button>
       </CardContent>
