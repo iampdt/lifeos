@@ -46,6 +46,7 @@ cookie is first-party. Scheduled jobs call the backend directly with a signed re
 | `api/` | FastAPI app and routes, request guard (session + CSRF, or bearer token), signed cron endpoint, error shape |
 | `auth/` | Google sign-in (OpenID Connect), account linking, argon2id passwords, server-side sessions, login rate limiter |
 | `workflows/` | LangGraph graphs (`evening.py`, `morning.py`, `weekly.py`), the run manager, the two-phase proposal builder, per-account contexts (`contexts.py`) |
+| `workspaces/` | Module catalogue and mapping validation, saved account workspaces |
 | `agents/` | Specialists: `planner`, `checkin`, `reviewer`, `chat`. Each is a prompt, an output schema and validation |
 | `execution/` | Action kinds and payloads, proposal lifecycle, executor, audit log |
 | `permissions/` | Field-level write allowlist and per-kind permission modes |
@@ -74,10 +75,17 @@ Query. Pages: sign-in, Command Center, Weekly review, Settings (see §11).
 
 ### 3.2 Mapping and schema drift
 
-`backend/config/notion_mapping.yaml` maps logical names to Notion property names, types and
-option values (`tasks.status.done → "Done"`). Code never uses a Notion display name, so a
-renamed property is a one-line config change. Data-source IDs come from the environment, with a
-`sandbox` profile that reads `NOTION_SANDBOX_*` instead.
+A mapping ties logical names to Notion property names, types and option values
+(`tasks.status.done → "Done"`). Code never uses a Notion display name, so a renamed property is
+a configuration change. The owner's workspace is mapped in `backend/config/notion_mapping.yaml`,
+with data-source IDs from the environment (and a `sandbox` profile that reads
+`NOTION_SANDBOX_*`); every other account saves its own mapping (`workspaces` table).
+
+A workspace is made of modules (`workspaces/modules.py`): Tasks is required; Habits, Weekly and
+Monthly reviews, Goals and Reading are optional, and the workflows skip what isn't mapped. In
+Habits, every checkbox property is a habit and every number property a metric (with an optional
+unit and description), so the check-in, review and chat describe whatever the workspace tracks.
+Status fields map semantic keys (`next`, `done`, …) to the workspace's own options.
 
 `notion/schema.py` compares each data source with the mapping and reports missing properties,
 wrong types and missing options. `GET /api/v1/notion/status` and `scripts/notion_check.py` show
@@ -111,7 +119,7 @@ Rules live in `services/rules.py` as pure functions. Their IDs appear in proposa
 
 | ID | Rule | Enforcement |
 | --- | --- | --- |
-| R1 | At most 3 major tasks a day. A major task is due that day, has Status Next or Doing, and isn't Recurring | Plans that exceed the free slots are rejected; the morning briefing offers to move extras; chat refuses to overfill a day |
+| R1 | At most 3 major tasks a day (each workspace can set its own limit). A major task is due that day, has Status Next or Doing, and isn't Recurring | Plans that exceed the free slots are rejected; the morning briefing offers to move extras; chat refuses to overfill a day |
 | R2 | Active means Status is not Done or Cancelled | Query builders and `is_open` |
 | R3 | Completed tasks are never deleted | No delete code path |
 | R4 | Done tasks leave active views but stay in history | History is Status Done grouped by Due week or month |
@@ -275,6 +283,7 @@ account (`user_id`), and every query filters on it.
 | `audit_log` | Append-only (a trigger rejects `UPDATE` and `DELETE`, except through `purge_user_audit` when an account is deleted): account, actor, event, entity, details. IDs and kinds only, no page contents |
 | `users`, `sessions` | Accounts (Google subject ID or password hash; at most one `is_owner`); sessions store a SHA-256 of the cookie token and a CSRF token |
 | `oauth_states` | Single-use sign-in and connection attempts: state, nonce and PKCE verifier (Google), account (Notion), expiry |
+| `workspaces` | An account's own mapping (module → data source and properties) and rule settings: timezone, major tasks a day, review day and time |
 | `notion_connections` | An account's Notion workspace connection: workspace, bot, access and refresh tokens (encrypted), status (`active` or `needs_reconnect`) |
 | `cron_runs` | One row per (account, job, local date) |
 | `checkpoint*` | LangGraph checkpoints, created and migrated by the checkpointer itself |

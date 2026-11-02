@@ -185,7 +185,7 @@ class Executor:
             if blocker:
                 raise _DependencyFailed(blocker)
             plan = build_plan(kind, parse_payload(kind, payload_data), self.specs, resolved)
-            check_plan(plan)
+            check_plan(plan, self.specs[plan.data_source])
             page_id, outcome, detail = await self._apply(plan, snapshot)
         except PermissionDenied as exc:
             outcome, detail, error = "failed", str(exc), {"type": "permission_denied"}

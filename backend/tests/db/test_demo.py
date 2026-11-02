@@ -34,7 +34,7 @@ async def demo_app(session_factory, demo: bool = True):
         clock=lambda: NOW,
     )
     contexts = Contexts(lambda user_id: make_deps(user_id=user_id), InMemorySaver())
-    context = contexts.for_user(user.id, is_owner=True)
+    context = await contexts.for_user(user.id, is_owner=True)
     assert context is not None
     await reset_demo(context.deps)
     settings = Settings(_env_file=None, lifeos_demo_mode=demo)

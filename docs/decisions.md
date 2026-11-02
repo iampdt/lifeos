@@ -96,4 +96,6 @@ replaced. Dates are when the decision was made.
 | I35 | Token storage | Notion tokens encrypted with Fernet (authenticated, so a wrong key or tampering fails loudly); `LIFEOS_ENCRYPTION_KEY` accepts several keys for rotation |
 | I36 | Token refresh | Refresh on a 401 (and before a stated expiry), under a row lock: Notion rotates refresh tokens, so two concurrent refreshes would lock the account out. Only Notion refusing the refresh asks the user to reconnect |
 | I37 | Connection attempts | Tied to the account that started them, checked against the session on return, so a forged callback can't attach a workspace to someone else's account |
+| I38 | Generic habits | In the habits data source every checkbox is a habit and every number a metric, with optional units and descriptions; the check-in's output schema is built from them per workspace |
+| I39 | Optional modules | Only Tasks is required. Week and month links, Inbox and cancelled statuses, priority, habits, goals and reading are used where mapped and skipped otherwise |
 

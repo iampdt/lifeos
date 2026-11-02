@@ -70,16 +70,18 @@ def make_services(
 ) -> tuple[Services, WorkflowDeps]:
     """App services whose owner account works on `fake`; returns them with the owner's deps."""
 
+    owner = make_deps(session_factory, fake, mock, now=now, writes=writes)
+
     def deps_for(user_id: uuid.UUID) -> WorkflowDeps:
+        if user_id == OWNER_ID:
+            return owner
         return make_deps(session_factory, fake, mock, now=now, writes=writes, user_id=user_id)
 
     contexts = Contexts(deps_for, InMemorySaver())
     services = Services(
         settings or Settings(_env_file=None), session_factory, contexts, clock=lambda: now, **extra
     )
-    owner = contexts.for_user(OWNER_ID, is_owner=True)
-    assert owner is not None
-    return services, owner.deps
+    return services, owner
 
 
 async def add_user(session_factory, email: str, *, password: str | None = None, **fields) -> User:

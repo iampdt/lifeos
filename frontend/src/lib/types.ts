@@ -32,7 +32,14 @@ export type QuestionRequest = {
   prompt: string;
   tasks: { ref: string; id: string; title: string; status: string | null; priority: string | null; due: string | null }[];
   books: { ref: string; id: string; title: string }[];
-  habits: { names: string[]; logged_today: { checks: Record<string, boolean> } | null };
+  /** The workspace's habits (checkboxes) and metrics (numbers); null without a habits module.
+   * `names` is the shape of runs started before habits were generic. */
+  habits: {
+    fields?: { key: string; name: string; description: string | null }[];
+    metrics?: { key: string; name: string; unit: string | null }[];
+    names?: string[];
+    logged_today: { checks: Record<string, boolean>; metrics?: Record<string, number> } | null;
+  } | null;
 };
 
 export type OverdueRow = {
@@ -59,8 +66,7 @@ export type WeekMetrics = {
 export type HabitSummary = {
   days_logged: number;
   checks: Record<string, number>;
-  avg_sleep: number | null;
-  avg_screen_time: number | null;
+  averages?: Record<string, number>;
 };
 
 export type ReviewDraft = {
@@ -123,6 +129,7 @@ export type SettingsView = {
   notion_profile: string;
   writes_enabled: boolean;
   timezone: string;
+  max_major_per_day: number;
   today: string;
   llm: {
     configured: boolean;

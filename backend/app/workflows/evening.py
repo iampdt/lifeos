@@ -20,7 +20,6 @@ from app.agents.checkin import parse_checkin
 from app.agents.planner import plan_day
 from app.domain.models import Book
 from app.execution.actions import (
-    HABIT_CHECKS,
     ActionKind,
     CreateTask,
     MarkDone,
@@ -29,7 +28,6 @@ from app.execution.actions import (
 )
 from app.services.context import RefMap
 from app.services.rules import (
-    MAX_MAJOR_PER_DAY,
     fallback_order,
     major_tasks,
     planning_candidates,
@@ -47,10 +45,18 @@ from app.workflows.deps import WorkflowDeps
 from app.workflows.proposing import ProposalBuilder
 
 NAME = "evening_checkin"
-PROMPT = (
-    "What did you finish today? Mention habits, sleep, screen time, pages read, what you "
-    "learned, and anything new to capture."
-)
+
+
+def question(deps: WorkflowDeps) -> str:
+    """The evening question, naming only what this workspace tracks."""
+    things = []
+    if deps.scorecard.habits:
+        things.append("habits")
+    things += [m.name.lower() for m in deps.scorecard.metrics]
+    if deps.workspace.books:
+        things.append("pages read")
+    things += ["what you learned", "anything new to capture"]
+    return f"What did you finish today? Mention {', '.join(things[:-1])} and {things[-1]}."
 
 
 class EveningState(BaseState, total=False):
@@ -82,15 +88,15 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
             task_refs.add(task.id)
         books: list[Book] = []
         if ws.books:
-            reading = deps.specs["books"].prop("status").value("reading")
+            reading = ws.books.spec.prop("status").value("reading")
             books = [b for b in await ws.books.queue() if b.status == reading]
         book_refs = RefMap("B")
         for book in books:
             book_refs.add(book.id)
-        rows = sorted(await ws.habits.for_day(today), key=lambda r: r.last_edited_time)
+        rows = await ws.habits.for_day(today) if ws.habits else []
+        rows.sort(key=lambda r: r.last_edited_time)
         habit_today = (
-            {"checks": rows[0].checks, "notes": rows[0].notes, "sleep": rows[0].sleep,
-             "screen_time": rows[0].screen_time}
+            {"checks": rows[0].checks, "metrics": rows[0].metrics, "notes": rows[0].notes}
             if rows else None
         )  # fmt: skip
         return {
@@ -112,7 +118,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
             {
                 "type": "question",
                 "workflow": NAME,
-                "prompt": PROMPT,
+                "prompt": question(deps),
                 "tasks": [
                     {"ref": ref, "id": pid, "title": tasks[pid].title,
                      "status": tasks[pid].status, "priority": tasks[pid].priority,
@@ -121,13 +127,15 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
                 ],
                 "books": [{"ref": ref, "id": bid, "title": books[bid]["title"]}
                           for ref, bid in (state.get("book_refs") or {}).items()],
-                "habits": {"names": list(HABIT_CHECKS), "logged_today": state.get("habit_today")},
+                "habits": (
+                    {**deps.scorecard.describe(), "logged_today": state.get("habit_today")}
+                    if deps.scorecard else None
+                ),
                 "accepts": {
                     "text": "free text",
                     "done_refs": "optional list of task refs, e.g. ['T1']",
-                    "habits": "optional {habit_name: true|false}",
-                    "sleep_hours": "optional number",
-                    "screen_time_hours": "optional number",
+                    "habits": "optional {habit key: true|false}",
+                    "metrics": "optional {metric key: number}",
                 },
             }
         )  # fmt: skip
@@ -145,6 +153,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
             books=books,
             task_refs=RefMap("T", dict(state["task_refs"])),
             book_refs=RefMap("B", dict(state.get("book_refs") or {})),
+            scorecard=deps.scorecard,
         )
         checkin = {k: v for k, v in asdict(result).items() if k not in ("warnings", "usage")}
         return {"checkin": checkin, "warnings": result.warnings, "llm": result.usage}
@@ -157,7 +166,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
         done = set(state["checkin"]["done_ids"])
         remaining = [t for t in load_tasks(state["tasks"]) if t.id not in done]
         committed = major_tasks(remaining, tomorrow, vocab)
-        slots = MAX_MAJOR_PER_DAY - len(committed)
+        slots = deps.rules.max_major_per_day - len(committed)
         candidates = planning_candidates(remaining, tomorrow, vocab)
         goals = await ws.goals.active() if ws.goals and slots > 0 and candidates else []
         result = await plan_day(
@@ -191,7 +200,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
                 rule_ids=("R5",),
                 title=state["titles"].get(task_id),
             )
-        habit = _habit_payload(today, checkin, state.get("habit_today"))
+        habit = _habit_payload(today, checkin, state.get("habit_today")) if ws.habits else None
         if habit:
             await builder.add(ActionKind.HABIT_UPSERT_DAY, habit, reason="From tonight's check-in.")
         books = {b["id"]: Book.model_validate(b) for b in state.get("books") or []}
@@ -240,9 +249,13 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
             "day": state.get("today"),
             "done": name(checkin.get("done_ids")),
             "partial": name(checkin.get("partial_ids")),
-            "habits": checkin.get("habits") or {},
-            "sleep": checkin.get("sleep"),
-            "screen_time": checkin.get("screen_time"),
+            # Display names, not mapping keys.
+            "habits": {
+                deps.scorecard.habit_name(k): v for k, v in (checkin.get("habits") or {}).items()
+            },
+            "metrics": [
+                deps.scorecard.metric(k).label(v) for k, v in (checkin.get("metrics") or {}).items()
+            ],
             "parsed_by": checkin.get("source"),
             "tomorrow": {
                 "day": plan_.get("day"),
@@ -279,18 +292,12 @@ def _habit_payload(
     today: date, checkin: dict[str, Any], existing: dict[str, Any] | None
 ) -> UpsertHabitDay | None:
     learned = checkin.get("learned")
-    if not (checkin["habits"] or learned or checkin["sleep"] is not None
-            or checkin["screen_time"] is not None):  # fmt: skip
+    metrics = checkin.get("metrics") or {}
+    if not (checkin["habits"] or metrics or learned):
         return None
     notes = None
     if learned:
         # Append to notes the owner already wrote today instead of replacing them.
         previous = (existing or {}).get("notes") or ""
         notes = learned if not previous or learned in previous else f"{previous}\n{learned}"
-    return UpsertHabitDay(
-        day=today,
-        checks=checkin["habits"],
-        sleep=checkin["sleep"],
-        screen_time=checkin["screen_time"],
-        notes=notes,
-    )
+    return UpsertHabitDay(day=today, checks=checkin["habits"], metrics=metrics, notes=notes)

@@ -18,6 +18,7 @@ from app.db.models import (
     OAuthState,
     Session,
     User,
+    Workspace,
 )
 from app.execution.audit import audit
 
@@ -74,6 +75,7 @@ async def delete_account(db: AsyncSession, user_id: uuid.UUID) -> None:
     await db.execute(delete(Session).where(Session.user_id == user_id))
     await db.execute(delete(OAuthState).where(OAuthState.user_id == user_id))
     await db.execute(delete(NotionConnection).where(NotionConnection.user_id == user_id))
+    await db.execute(delete(Workspace).where(Workspace.user_id == user_id))
     await db.execute(delete(User).where(User.id == user_id))
     audit(db, actor="user", event="account.deleted", user_id=None, entity_type="user",
           entity_id=str(user_id))  # fmt: skip

@@ -59,12 +59,19 @@ def month_title(day: date) -> str:
     return f"{day:%b} {day.year}"
 
 
-def format_habit_title(day: date) -> str:
-    return f"{day.day:02d}/{day.month:02d}/{day.year:04d}"
+def format_habit_title(day: date, fmt: str | None = None) -> str:
+    """A habit row's title for `day`, in the workspace's format (ISO `yyyy-mm-dd` by default)."""
+    return day.strftime(fmt or "%Y-%m-%d")
 
 
-def parse_habit_title(title: str) -> date | None:
-    """Parse `dd/mm/yyyy`, legacy `d/m/yy`, or ISO `yyyy-mm-dd`. Returns None if unparseable."""
+def parse_habit_title(title: str, fmt: str | None = None) -> date | None:
+    """Parse with the workspace's format first, then `dd/mm/yyyy` (or legacy `d/m/yy`) and ISO
+    `yyyy-mm-dd`. Returns None if unparseable."""
+    if fmt:
+        try:
+            return datetime.strptime(title.strip(), fmt).date()
+        except ValueError:
+            pass
     try:
         if match := _DMY.match(title):
             day, month, year = (int(part) for part in match.groups())

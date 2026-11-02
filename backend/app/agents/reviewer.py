@@ -26,6 +26,7 @@ from app.services.context import (
     task_block,
 )
 from app.services.rules import HabitSummary, WeekMetrics
+from app.services.scorecard import Scorecard
 
 
 class CarryAdvice(BaseModel):
@@ -86,13 +87,10 @@ def metrics_line(metrics: WeekMetrics) -> str:
     )
 
 
-def habits_line(habits: HabitSummary) -> str:
-    checks = ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in habits.checks.items()) or "none"
+def habits_line(habits: HabitSummary, scorecard: Scorecard) -> str:
+    checks = ", ".join(f"{scorecard.habit_name(k)} {v}" for k, v in habits.checks.items()) or "none"
     parts = [f"{habits.days_logged} of 7 days logged; checks: {checks}"]
-    if habits.avg_sleep is not None:
-        parts.append(f"avg sleep {habits.avg_sleep} h")
-    if habits.avg_screen_time is not None:
-        parts.append(f"avg screen time {habits.avg_screen_time} h")
+    parts += [f"avg {scorecard.metric(k).label(v)}" for k, v in habits.averages.items()]
     return "; ".join(parts) + "."
 
 
@@ -121,6 +119,7 @@ async def draft_review(
     metrics: WeekMetrics,
     habits: HabitSummary,
     previous_habits: HabitSummary,
+    scorecard: Scorecard,
     done: Sequence[Task],
     overdue: Sequence[Task],
     goals: Sequence[Goal] = (),
@@ -132,11 +131,14 @@ async def draft_review(
     sections = [
         f"WEEK: {week_label}\nTASKS: {metrics_line(metrics)}\nBY AREA (done/planned):\n"
         + (areas or "(none)"),
-        "HABITS THIS WEEK: " + habits_line(habits),
-        "HABITS LAST WEEK: " + habits_line(previous_habits),
+        *(
+            ["HABITS THIS WEEK: " + habits_line(habits, scorecard),
+             "HABITS LAST WEEK: " + habits_line(previous_habits, scorecard)]
+            if scorecard else []
+        ),
         task_block("DONE THIS WEEK", done_refs, done[:25]),
         task_block("OVERDUE (needs a decision)", refs, overdue),
-    ]
+    ]  # fmt: skip
     if goals:
         sections.append("ACTIVE GOALS:\n" + "\n".join(f"- {clean(g.title)}" for g in goals))
     prompt = data_block(*sections) + "\n\nWrite the weekly review."
@@ -191,6 +193,7 @@ def render_review(
     review: dict[str, Any],
     metrics: WeekMetrics,
     habits: HabitSummary,
+    scorecard: Scorecard,
     owner_note: str | None = None,
 ) -> str:
     """Plain-text Review written to the Weekly Progress page (week.close)."""
@@ -202,7 +205,8 @@ def render_review(
             lines += [f"{title}:", *[f"• {item}" for item in review[key]], ""]
     if review.get("priorities"):
         lines += ["Next week:", *[f"{i}. {p}" for i, p in enumerate(review["priorities"], 1)], ""]
-    lines.append("Habits: " + habits_line(habits))
+    if scorecard:
+        lines.append("Habits: " + habits_line(habits, scorecard))
     if owner_note:
         lines += ["", "Owner's note: " + owner_note.strip()]
     return "\n".join(lines).strip()

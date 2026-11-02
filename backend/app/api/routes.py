@@ -192,7 +192,8 @@ async def login(body: LoginBody, request: Request, response: Response) -> dict[s
 
 @protected.get("/auth/me")
 async def me(principal: CurrentUser, request: Request) -> dict[str, Any]:
-    context = services(request).contexts.for_user(principal.user_id, is_owner=principal.is_owner)
+    contexts = services(request).contexts
+    context = await contexts.for_user(principal.user_id, is_owner=principal.is_owner)
     return {
         "via": principal.via,
         "email": principal.email,
@@ -236,7 +237,7 @@ async def delete_my_account(
         await svc.contexts.checkpointer.adelete_thread(thread_id)
     async with svc.session_factory() as db, db.begin():
         await delete_account(db, principal.user_id)
-    svc.contexts.forget(principal.user_id)
+    await svc.contexts.forget(principal.user_id)
     response.delete_cookie(SESSION_COOKIE, path="/")
     return {"status": "deleted"}
 
@@ -434,14 +435,23 @@ async def demo_reset(request: Request, ctx: Context) -> dict[str, str]:
 
 
 @protected.get("/settings")
-async def get_settings_view(request: Request, ctx: Context) -> dict[str, Any]:
+async def get_settings_view(
+    request: Request, ctx: Context, principal: CurrentUser
+) -> dict[str, Any]:
     svc = services(request)
     llm = ctx.deps.llm
+    if svc.settings.lifeos_demo_mode:
+        profile = "demo"
+    elif principal.is_owner:
+        profile = svc.settings.notion_profile  # live or sandbox: the environment's workspace
+    else:
+        profile = "account"
     return {
         "demo": svc.settings.lifeos_demo_mode,
-        "notion_profile": "demo" if svc.settings.lifeos_demo_mode else svc.settings.notion_profile,
+        "notion_profile": profile,
         "writes_enabled": ctx.deps.writes_enabled,
         "timezone": ctx.deps.tz.key,
+        "max_major_per_day": ctx.deps.rules.max_major_per_day,
         "today": ctx.deps.today().isoformat(),  # in the account's timezone, not the browser's
         "llm": {
             "configured": llm.provider is not None,

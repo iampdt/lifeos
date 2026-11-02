@@ -27,6 +27,7 @@ from app.api.cron import router as cron_router
 from app.api.errors import ApiError, error_body
 from app.api.notion_connect import router as notion_connect_router
 from app.api.routes import router
+from app.api.workspace_routes import router as workspace_router
 from app.auth.google import GoogleOIDC
 from app.auth.sessions import RateLimiter
 from app.core.config import Settings, env_values, get_settings
@@ -36,7 +37,7 @@ from app.db.session import make_engine, make_session_factory
 from app.demo.setup import demo_notion, demo_specs, demo_user, ensure_demo_database, reset_demo
 from app.llm.factory import build_router
 from app.notion.client import NotionClient
-from app.notion.connections import NotionConnections
+from app.notion.connections import NotionConnections, ReconnectNeeded
 from app.notion.errors import NotionError
 from app.notion.mapping import load_mapping
 from app.notion.oauth import NotionOAuth
@@ -44,6 +45,7 @@ from app.notion.rate_limiter import AsyncTokenBucket
 from app.workflows.contexts import Contexts, UserContext
 from app.workflows.deps import WorkflowDeps, utcnow
 from app.workflows.runner import RunStateError, UnknownWorkflow
+from app.workspaces.store import AccountWorkspaces
 
 
 @dataclass
@@ -65,7 +67,7 @@ class Services:
         """The owner account's context: scheduled jobs and scripts act as the owner."""
         async with self.session_factory() as db:
             owner_id = await db.scalar(select(User.id).where(User.is_owner))
-        return self.contexts.for_user(owner_id, is_owner=True) if owner_id else None
+        return await self.contexts.for_user(owner_id, is_owner=True) if owner_id else None
 
 
 async def build_demo_services(settings: Settings, stack: AsyncExitStack) -> Services:
@@ -85,7 +87,7 @@ async def build_demo_services(settings: Settings, stack: AsyncExitStack) -> Serv
     )
     contexts = Contexts(lambda user_id: make_deps(user_id=user_id), InMemorySaver())
     user = await demo_user(session_factory)
-    context = contexts.for_user(user.id, is_owner=True)
+    context = await contexts.for_user(user.id, is_owner=True)
     assert context is not None
     await reset_demo(context.deps)
     return Services(settings, session_factory, contexts)
@@ -112,22 +114,38 @@ async def build_services(settings: Settings, stack: AsyncExitStack) -> Services:
     )
     await saver.setup()  # creates the checkpoint tables on first run
     session_factory = make_session_factory(engine)
+    llm = build_router(settings)
     make_deps = partial(
         WorkflowDeps,
         session_factory,
         client,
         specs,
-        build_router(settings),
+        llm,
         writes_enabled=settings.lifeos_writes_enabled,
         tz=ZoneInfo(settings.timezone),
     )
-    contexts = Contexts(lambda user_id: make_deps(user_id=user_id), saver)
+    connections = notion_connections(settings, session_factory)
+    accounts = None
+    if connections is not None:
+
+        def account_deps(notion, account_specs, user_id, tz, rules) -> WorkflowDeps:
+            return WorkflowDeps(
+                session_factory, notion, account_specs, llm, user_id=user_id, tz=tz, rules=rules,
+                writes_enabled=settings.lifeos_writes_enabled,
+            )  # fmt: skip
+
+        accounts = AccountWorkspaces(session_factory, connections, account_deps)
+    contexts = Contexts(
+        lambda user_id: make_deps(user_id=user_id),
+        saver,
+        account_deps=accounts.deps_for if accounts else None,
+    )
     return Services(
         settings,
         session_factory,
         contexts,
         google=google_client(settings),
-        connections=notion_connections(settings, session_factory),
+        connections=connections,
     )
 
 
@@ -184,10 +202,12 @@ def create_app(services: Services | None = None) -> FastAPI:
     app.include_router(router, prefix="/api/v1")
     app.include_router(cron_router, prefix="/api/v1")
     app.include_router(notion_connect_router, prefix="/api/v1")
+    app.include_router(workspace_router, prefix="/api/v1")
 
     @app.exception_handler(ApiError)
     async def _api_error(request: Request, exc: ApiError) -> JSONResponse:
-        return JSONResponse(error_body(exc.code, exc.message, exc.retryable), exc.status)
+        body = error_body(exc.code, exc.message, exc.retryable, details=exc.details)
+        return JSONResponse(body, exc.status)
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
@@ -209,6 +229,8 @@ def create_app(services: Services | None = None) -> FastAPI:
 
     @app.exception_handler(NotionError)
     async def _notion(request: Request, exc: NotionError) -> JSONResponse:
+        if isinstance(exc, ReconnectNeeded):
+            return JSONResponse(error_body("notion_reconnect", str(exc)), 409)
         code = f"notion_{exc.code}" if exc.code else "notion_error"
         body = error_body(code, str(exc), exc.retryable, exc.request_id)
         return JSONResponse(body, 502)

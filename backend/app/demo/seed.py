@@ -102,7 +102,7 @@ def seed_workspace(notion: InMemoryNotion, specs: dict[str, DataSourceSpec], tod
         notion.seed(specs["tasks"], {**done, "due": week_start, "completed": week_start})
 
     for offset, checks in zip(range(-6, 0), HABITS, strict=True):
-        values = {"title": format_habit_title(day(offset)), **checks,
+        values = {"title": format_habit_title(day(offset), specs["habits"].date_format), **checks,
                   "sleep": 7.5 if checks.get("woke_on_time") else 6, "screen_time": 3}  # fmt: skip
         notion.seed(specs["habits"], values)
 

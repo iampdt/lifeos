@@ -93,7 +93,8 @@ async def test_habit_rows_are_found_by_date_whatever_the_title_format():
     ]
     repo = HabitRepository(FakeClient(rows), specs()["habits"])
     [day] = await repo.for_day(date(2026, 11, 1))
-    assert day.id == "h1" and day.checks["reading"] is True and day.sleep == 7.5
+    assert day.id == "h1" and day.checks["reading"] is True and day.metrics["sleep"] == 7.5
+    assert set(day.checks) == set(specs()["habits"].habit_fields)  # every checkbox is a habit
     assert [r.day for r in await repo.all()][-1] is None  # unparseable title is kept, flagged
 
 

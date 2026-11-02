@@ -1,8 +1,8 @@
-"""Notion query filters that mirror the owner's saved views.
+"""Notion query filters for the task views the workflows depend on.
 
-The public API queries a data source with filters but can't run a saved view, so each view the
-workflows depend on is rebuilt here. Each method names the view it mirrors; Phase 3 checks them
-against the real views.
+The public API queries a data source with filters but can't run a saved view, so each view is
+rebuilt here (each method names the view it mirrors). Only `title`, `status` (with `next` and
+`done`) and `due` are certain to exist; the rest are used when the mapping has them.
 """
 
 from __future__ import annotations
@@ -37,14 +37,18 @@ class TaskQueries:
     def __init__(self, spec: DataSourceSpec) -> None:
         self.status = spec.prop("status")
         self.due = spec.prop("due")
-        self.priority = spec.prop("priority")
-        self.created = spec.prop("created")
+        self.priority = spec.properties.get("priority")
+        self.created = spec.properties.get("created")
 
     def _open(self) -> list[dict[str, Any]]:
-        return [
-            _select(self.status, "does_not_equal", self.status.value("done")),
-            _select(self.status, "does_not_equal", self.status.value("cancelled")),
-        ]
+        closed = [self.status.values[k] for k in ("done", "cancelled") if k in self.status.values]
+        return [_select(self.status, "does_not_equal", name) for name in closed]
+
+    def _by_priority_then_due(self) -> list[dict[str, Any]]:
+        due = {"property": self.due.name, "direction": "ascending"}
+        if self.priority is None:
+            return [due]
+        return [{"property": self.priority.name, "direction": "ascending"}, due]
 
     def active(self) -> QuerySpec:
         """🔥 All Active Tasks."""
@@ -56,28 +60,26 @@ class TaskQueries:
         """🔥 Today: open tasks due today or earlier."""
         return QuerySpec(
             _all(*self._open(), _date(self.due, "on_or_before", today)),
-            [
-                {"property": self.priority.name, "direction": "ascending"},
-                {"property": self.due.name, "direction": "ascending"},
-            ],
+            self._by_priority_then_due(),
         )
 
     def overdue(self, today: date) -> QuerySpec:
         """🔁 Overdue / Carry Forward: open tasks due before today."""
         return QuerySpec(
             _all(*self._open(), _date(self.due, "before", today)),
-            [
-                {"property": self.priority.name, "direction": "ascending"},
-                {"property": self.due.name, "direction": "ascending"},
-            ],
+            self._by_priority_then_due(),
         )
 
-    def inbox(self) -> QuerySpec:
-        """📥 Inbox."""
-        return QuerySpec(
-            _select(self.status, "equals", self.status.value("inbox")),
-            [{"property": self.created.name, "direction": "descending"}],
+    def inbox(self) -> QuerySpec | None:
+        """📥 Inbox. None when the workspace has no Inbox status."""
+        if "inbox" not in self.status.values:
+            return None
+        newest = (
+            {"property": self.created.name, "direction": "descending"}
+            if self.created
+            else {"timestamp": "created_time", "direction": "descending"}
         )
+        return QuerySpec(_select(self.status, "equals", self.status.value("inbox")), [newest])
 
     def next_7_days(self, today: date) -> QuerySpec:
         """📅 Next 7 Days."""
@@ -97,7 +99,7 @@ class TaskQueries:
                 _select(self.status, "equals", self.status.value("next")),
                 _date(self.due, "equals", today),
             ),
-            [{"property": self.priority.name, "direction": "ascending"}],
+            self._by_priority_then_due(),
         )
 
     def done_due_between(self, start: date, end: date) -> QuerySpec:

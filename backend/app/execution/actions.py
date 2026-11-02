@@ -44,8 +44,9 @@ class MarkDone(Payload):
 
 
 class SetDue(Payload):
-    """Carry forward or reschedule. The Week and Month links always move with the Due date
-    (owner decisions Q3/Q8): each must name an existing page or a `*.create` proposal."""
+    """Carry forward or reschedule. In a workspace that links tasks to weekly and monthly
+    pages, those links move with the Due date (R7): each names an existing page or a
+    `*.create` proposal. Without them, only the date changes."""
 
     page_id: str
     new_due: date
@@ -62,10 +63,8 @@ class SetDue(Payload):
                 getattr(self, f"{period}_page_id"),
                 getattr(self, f"{period}_proposal_id"),
             )
-            if (page is None) == (proposal is None):
-                raise ValueError(
-                    f"exactly one of {period}_page_id / {period}_proposal_id is required"
-                )
+            if page is not None and proposal is not None:
+                raise ValueError(f"give {period}_page_id or {period}_proposal_id, not both")
         return self
 
 
@@ -78,29 +77,39 @@ class CreateTask(Payload):
     title: str = Field(min_length=1, max_length=200)
     status: Literal["inbox", "next"] = "inbox"
     due: date | None = None
-    priority: Literal["p0", "p1", "p2", "p3"] | None = None
+    priority: str | None = Field(default=None, pattern=r"^p\d$")  # p0 is the highest
     area: str | None = None
     goal_ids: tuple[str, ...] = ()
 
 
-HABIT_CHECKS = (
-    "woke_on_time", "dsa", "deep_work", "technical_learning", "workout",
-    "protein_target", "reading", "speech_practice", "daily_highlight",
-)  # fmt: skip
-
-
 class UpsertHabitDay(Payload):
+    """Checks and metric values keyed by the habits mapping's field names; `build_plan` refuses
+    names the workspace doesn't have."""
+
     day: date
     checks: dict[str, bool] = Field(default_factory=dict)
-    sleep: float | None = Field(default=None, ge=0, le=24)
-    screen_time: float | None = Field(default=None, ge=0, le=1440)
+    metrics: dict[str, float] = Field(default_factory=dict)
     notes: str | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_metrics(cls, data: Any) -> Any:
+        # Proposals made before habits were generic stored sleep and screen time as fields.
+        if isinstance(data, dict) and ({"sleep", "screen_time"} & set(data)):
+            data = dict(data)
+            metrics = dict(data.get("metrics") or {})
+            for name in ("sleep", "screen_time"):
+                value = data.pop(name, None)
+                if value is not None:
+                    metrics[name] = value
+            data["metrics"] = metrics
+        return data
+
     @model_validator(mode="after")
-    def _known_checks(self) -> UpsertHabitDay:
-        unknown = set(self.checks) - set(HABIT_CHECKS)
-        if unknown:
-            raise ValueError(f"unknown habit checks: {sorted(unknown)}")
+    def _sane_metrics(self) -> UpsertHabitDay:
+        for name, value in self.metrics.items():
+            if not 0 <= value <= 100_000:
+                raise ValueError(f"{name} out of range: {value}")
         return self
 
 
@@ -217,16 +226,23 @@ def build_plan(
     spec = specs[source]
 
     def option(field_name: str, key: str) -> str:
+        if not spec.has_value(field_name, key):
+            raise ValueError(f"{source}.{field_name} has no option for {key!r} in this workspace")
         return spec.prop(field_name).value(key)
 
     match payload:
         case MarkDone():
-            values = {"status": option("status", "done"), "completed": payload.completed_on}
+            values = {"status": option("status", "done")}
+            if spec.has("completed"):
+                values["completed"] = payload.completed_on
             return WritePlan(source, payload.page_id, values)
         case SetDue():
-            week = payload.week_page_id or resolved_pages[payload.week_proposal_id]
-            month = payload.month_page_id or resolved_pages[payload.month_proposal_id]
-            values = {"due": payload.new_due, "week": [week], "month": [month]}
+            values = {"due": payload.new_due}
+            for period in ("week", "month"):
+                page = getattr(payload, f"{period}_page_id")
+                proposal = getattr(payload, f"{period}_proposal_id")
+                if (page or proposal) and spec.has(period):
+                    values[period] = [page or resolved_pages[proposal]]
             return WritePlan(source, payload.page_id, values)
         case SetStatus():
             return WritePlan(source, payload.page_id, {"status": option("status", payload.status)})
@@ -237,40 +253,55 @@ def build_plan(
             }
             if payload.due:
                 values["due"] = payload.due
-            if payload.priority:
+            if payload.priority and spec.has("priority"):
                 values["priority"] = option("priority", payload.priority)
-            if payload.area:
+            if payload.area and spec.has("area"):
                 values["area"] = payload.area
-            if payload.goal_ids:
+            if payload.goal_ids and spec.has("goal"):
                 values["goal"] = list(payload.goal_ids)
             lookup = Lookup("task_title_due", day=payload.due, title=payload.title)
             return WritePlan(source, None, values, lookup)
         case UpsertHabitDay():
-            values = {"title": format_habit_title(payload.day), **payload.checks}
-            for name in ("sleep", "screen_time", "notes"):
-                if getattr(payload, name) is not None:
-                    values[name] = getattr(payload, name)
+            unknown = (set(payload.checks) - set(spec.habit_fields)) | (
+                set(payload.metrics) - set(spec.metric_fields)
+            )
+            if unknown:
+                raise ValueError(f"not habits or metrics of this workspace: {sorted(unknown)}")
+            values = {
+                "title": format_habit_title(payload.day, spec.date_format),
+                **payload.checks,
+                **payload.metrics,
+            }
+            if spec.has("day"):
+                values["day"] = payload.day
+            if payload.notes is not None and spec.has("notes"):
+                values["notes"] = payload.notes
             return WritePlan(
                 source, None, values, Lookup("habit_day", day=payload.day), upsert=True
             )
         case CreatePeriod():
-            values = {
-                "title": payload.title,
-                "start": payload.start,
-                "end": payload.end,
-                "status": option("status", payload.status),
-            }
+            values = {"title": payload.title, "start": payload.start, "end": payload.end}
+            if spec.has_value("status", payload.status):
+                values["status"] = option("status", payload.status)
             return WritePlan(source, None, values, Lookup("period_start", day=payload.start))
         case ClosePeriod():
-            values = {"review": payload.review, "status": option("status", "closed")}
+            values = {}
+            if spec.has("review"):
+                values["review"] = payload.review
+            if spec.has_value("status", "closed"):
+                values["status"] = option("status", "closed")
+            if not values:
+                raise ValueError(f"{source} has neither a review nor a closed status to write")
             return WritePlan(source, payload.page_id, values)
         case UpdateBookProgress():
             values = {}
-            if payload.status:
+            if payload.status and spec.has_value("status", payload.status):
                 values["status"] = option("status", payload.status)
             for name in ("pages_read", "started", "finished"):
-                if getattr(payload, name) is not None:
+                if getattr(payload, name) is not None and spec.has(name):
                     values[name] = getattr(payload, name)
+            if not values:
+                raise ValueError("this workspace's reading list has none of these fields")
             return WritePlan(source, payload.page_id, values)
     raise ValueError(f"no plan for {kind}")  # pragma: no cover
 

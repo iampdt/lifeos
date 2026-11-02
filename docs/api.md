@@ -26,10 +26,10 @@ Every error has the same shape:
 | Status | Codes |
 | --- | --- |
 | 401 | `unauthorized`, `invalid_credentials`, `bad_signature` |
-| 403 | `csrf_failed`, `password_sign_in_disabled`, `session_required`, `demo_account` |
+| 403 | `csrf_failed`, `password_sign_in_disabled`, `session_required`, `demo_account`, `environment_workspace` |
 | 404 | `unknown_workflow`, `unknown_job`, `http_error` |
 | 409 | `run_state` (run not found or not waiting), `run_owned` (decide it through its run), `no_workspace`, `notion_reconnect`, `not_connected` |
-| 422 | `invalid_request`, `confirmation_mismatch` |
+| 422 | `invalid_request`, `confirmation_mismatch`, `invalid_mapping` (with `details`) |
 | 429 | `rate_limited` (sign-in) |
 | 502 | `notion_<code>`, `run_failed` |
 | 503 | `auth_not_configured`, `cron_not_configured`, `no_owner` |
@@ -78,7 +78,7 @@ Answers by request type:
 
 | `waiting_for.type` | `answer` |
 | --- | --- |
-| `question` (evening check-in) | `{"text": "…"}` and/or structured fields: `done_refs`, `partial_refs`, `habits` (`{name: bool}`), `sleep_hours`, `screen_time_hours`, `pages_read` (`[{ref, pages}]`), `learned`, `new_tasks`. Structured fields win over what the model extracts |
+| `question` (evening check-in) | `{"text": "…"}` and/or structured fields: `done_refs`, `partial_refs`, `habits` (`{key: bool}`), `metrics` (`{key: number}`), `pages_read` (`[{ref, pages}]`), `learned`, `new_tasks`. The question lists the workspace's habits and metrics (`habits.fields`, `habits.metrics`) with their keys; it's `null` without a habits module. Structured fields win over what the model extracts |
 | `decisions` (weekly review) | `{"overdue": {"T1": {"decision": "carry_forward" \| "reschedule" \| "cancel" \| "skip", "due": "YYYY-MM-DD"}}, "inbox": {"I1": {"action": "keep" \| "next" \| "cancel", "due": "…"}}, "note": "…"}`. Anything omitted takes the recommendation (Inbox items are kept) |
 | `approval` | `{"approve": "all"}` or `{"approve": ["<proposal id>", …], "edits": {"<id>": {"new_due": "…"}}, "note": "…"}`. Everything not approved is rejected |
 
@@ -137,8 +137,19 @@ Outcomes: `verified`, `noop`, `mismatch`, `stale`, `failed`, `blocked` (writes o
 | Method and path | Description |
 | --- | --- |
 | `GET /tasks?view=active\|today\|overdue\|inbox\|next7` | Tasks from the corresponding view |
-| `GET /settings` | Notion profile, write switch, timezone, today's date in that timezone, model chains, tokens used today, permission modes |
+| `GET /settings` | Workspace (`notion_profile`: `live`, `sandbox`, `demo` or `account`), write switch, timezone, major tasks a day, today's date in that timezone, model chains, tokens used today, permission modes |
 | `GET /notion/status` | Integration name, workspace, and per data source: reachable, schema matches, drift details |
+
+### Workspace mapping
+
+Which data source and properties each module uses (multi-user §Generic workspace model). The
+owner's workspace comes from the environment and is read-only here.
+
+| Method and path | Description |
+| --- | --- |
+| `GET /workspace/modules` | What each module needs: fields, allowed property types, required ones, and the meanings a status field must or may map (`needs`, `allows`) |
+| `GET /workspace` | `{source, editable, modules, settings}`; `source` is `environment`, `account` or null (not set up yet) |
+| `PUT /workspace` | Body `{modules, settings}`, with `settings` `{timezone, max_major_per_day, review_weekday, review_time}`. Checked structurally and then against the live data sources; problems come back as 422 `invalid_mapping` with every one in `error.details`. The owner's environment workspace answers 403 `environment_workspace` |
 
 ### Notion connection
 

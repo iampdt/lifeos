@@ -45,10 +45,12 @@ class Goal(NotionRecord):
 
 
 class HabitDay(NotionRecord):
-    day: date | None = None  # parsed from the title; None if the title isn't a date
+    """One day's row in the habits data source: a check per habit and a value per metric,
+    keyed by the mapping's field names."""
+
+    day: date | None = None  # from the date property, or parsed from the title
     checks: dict[str, bool] = Field(default_factory=dict)
-    sleep: float | None = None
-    screen_time: float | None = None
+    metrics: dict[str, float] = Field(default_factory=dict)
     notes: str = ""
 
 

@@ -6,6 +6,23 @@
 # `optional_habits` lists habits the message reasonably implies; reporting them is allowed but
 # not required. `learned` is checked only when the case states it.
 
+# The synthetic workspace's scorecard: what its habits data source tracks (habits are checkbox
+# properties, metrics number properties, as in any mapped workspace).
+scorecard:
+  habits:
+    woke_on_time: Woke up on time
+    dsa: Did DSA / coding-interview practice
+    deep_work: Did a deep-work block
+    technical_learning: Studied a technical topic
+    workout: Worked out / exercised
+    protein_target: Hit the protein target
+    reading: Read a book
+    speech_practice: Did speech practice
+    daily_highlight: "Completed the day's highlight"
+  metrics:
+    sleep: {unit: hours, description: Hours slept last night}
+    screen_time: {unit: hours, description: Phone screen time}
+
 cases:
   - id: simple-done
     tasks: [Write unit tests for the payments service, Review PR 42, Draft blog outline]

@@ -29,7 +29,7 @@ class _Draft:
     last_edited: datetime | None = None
     creates_period: tuple[str, str] | None = None  # key of the period this draft creates
     title: str | None = None
-    move: tuple[str, date, str, PeriodTarget, PeriodTarget] | None = None  # set_due inputs
+    move: tuple[str, date, str, PeriodTarget | None, PeriodTarget | None] | None = None
 
 
 class ProposalBuilder:
@@ -54,8 +54,8 @@ class ProposalBuilder:
         snapshot, edited = await take_snapshot(self.deps.notion, self.deps.specs, kind, payload)
         self._drafts.append(_Draft(kind, reason, rule_ids, payload, snapshot, edited, title=title))
 
-    async def ensure_period(self, target: PeriodTarget, reason: str) -> None:
-        if target.create is None or target.key in self._period_keys:
+    async def ensure_period(self, target: PeriodTarget | None, reason: str) -> None:
+        if target is None or target.create is None or target.key in self._period_keys:
             return
         kind = ActionKind.WEEK_CREATE if target.kind == "week" else ActionKind.MONTH_CREATE
         self._period_keys.add(target.key)
@@ -73,15 +73,16 @@ class ProposalBuilder:
     ) -> None:
         week = await self.resolver.resolve("week", new_due)
         month = await self.resolver.resolve("month", new_due)
-        await self.ensure_period(week, f"Weekly Progress page for {new_due:%d %b} (R7).")
-        await self.ensure_period(month, f"Monthly Progress page for {new_due:%b %Y} (R7).")
+        await self.ensure_period(week, f"Weekly page for {new_due:%d %b} (R7).")
+        await self.ensure_period(month, f"Monthly page for {new_due:%b %Y} (R7).")
         placeholder = _set_due(page_id, new_due, decision, week, month, {})
         snapshot, edited = await take_snapshot(
             self.deps.notion, self.deps.specs, ActionKind.TASK_SET_DUE, placeholder
         )
+        rules = {*rule_ids, "R7"} if (week or month) else set(rule_ids)
         self._drafts.append(
             _Draft(
-                ActionKind.TASK_SET_DUE, reason, tuple(sorted({*rule_ids, "R7"})),
+                ActionKind.TASK_SET_DUE, reason, tuple(sorted(rules)),
                 snapshot=snapshot, last_edited=edited,
                 move=(page_id, new_due, decision, week, month), title=title,
             )
@@ -122,14 +123,16 @@ def _set_due(
     page_id: str,
     new_due: date,
     decision: str,
-    week: PeriodTarget,
-    month: PeriodTarget,
+    week: PeriodTarget | None,
+    month: PeriodTarget | None,
     created: dict[tuple[str, str], uuid.UUID],
 ) -> SetDue:
     """Link to the existing page, or to the proposal that creates it. Before commit, a random
     UUID stands in for that proposal (only the snapshot is computed from it)."""
     links: dict[str, Any] = {}
     for name, target in (("week", week), ("month", month)):
+        if target is None:
+            continue
         if target.page_id:
             links[f"{name}_page_id"] = target.page_id
         else:

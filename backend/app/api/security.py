@@ -90,7 +90,8 @@ async def user_context(
     request: Request, principal: Annotated[Principal, Depends(require_user)]
 ) -> UserContext:
     """The caller's workspace and runner. Accounts without a workspace get 409."""
-    context = services(request).contexts.for_user(principal.user_id, is_owner=principal.is_owner)
+    contexts = services(request).contexts
+    context = await contexts.for_user(principal.user_id, is_owner=principal.is_owner)
     if context is None:
         raise ApiError(409, "no_workspace", "this account has no Notion workspace connected yet")
     return context

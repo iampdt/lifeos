@@ -8,13 +8,16 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from app.execution.actions import HABIT_CHECKS, ActionKind, WritePlan
+from app.execution.actions import ActionKind, WritePlan
+from app.notion.mapping import DataSourceSpec
+
+# Habits allow these plus every habit (checkbox) and metric (number) the mapping has.
+HABIT_FIELDS = frozenset({"title", "day", "notes"})
 
 WRITE_ALLOWLIST: dict[str, frozenset[str]] = {
     "tasks": frozenset(
         {"title", "status", "due", "completed", "priority", "area", "goal", "week", "month"}
     ),
-    "habits": frozenset({"title", "sleep", "screen_time", "notes", *HABIT_CHECKS}),
     "weeks": frozenset({"title", "start", "end", "status", "theme", "review"}),
     "months": frozenset({"title", "start", "end", "status", "theme", "review"}),
     "books": frozenset({"status", "pages_read", "started", "finished"}),
@@ -36,8 +39,14 @@ class PermissionDenied(Exception):
     pass
 
 
-def check_plan(plan: WritePlan) -> None:
-    allowed = WRITE_ALLOWLIST.get(plan.data_source, frozenset())
+def allowed_fields(data_source: str, spec: DataSourceSpec) -> frozenset[str]:
+    if data_source == "habits":
+        return HABIT_FIELDS | set(spec.habit_fields) | set(spec.metric_fields)
+    return WRITE_ALLOWLIST.get(data_source, frozenset())
+
+
+def check_plan(plan: WritePlan, spec: DataSourceSpec) -> None:
+    allowed = allowed_fields(plan.data_source, spec)
     refused = sorted(set(plan.values) - allowed)
     if refused:
         raise PermissionDenied(f"{plan.data_source}: writing {refused} is not allowed")

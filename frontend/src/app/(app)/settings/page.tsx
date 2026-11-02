@@ -26,6 +26,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ApiError, api, setCsrfToken } from "@/lib/api";
 import type { NotionStatus } from "@/lib/types";
 
+const WORKSPACE_LABELS: Record<string, string> = {
+  live: "Configured for this deployment",
+  sandbox: "Sandbox copy",
+  demo: "Sample workspace",
+  account: "Your connected workspace",
+};
+
 export default function SettingsPage() {
   const session = useSession();
   const settings = useSettings();
@@ -54,7 +61,8 @@ export default function SettingsPage() {
                 {!s && <Skeleton className="h-24" />}
                 {s && (
                   <>
-                    <Row label="Notion workspace">{s.notion_profile === "sandbox" ? "Sandbox copy" : "Life OS (live)"}</Row>
+                    <Row label="Notion workspace">{WORKSPACE_LABELS[s.notion_profile] ?? s.notion_profile}</Row>
+                <Row label="Major tasks a day">{s.max_major_per_day}</Row>
                     <Row label="Writes to Notion">
                       <Badge variant={s.writes_enabled ? "secondary" : "outline"}>{s.writes_enabled ? "On" : "Off"}</Badge>
                       <span className="ml-2 text-xs text-muted-foreground">LIFEOS_WRITES_ENABLED</span>

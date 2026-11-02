@@ -1,14 +1,18 @@
 from datetime import date
 
-from app.agents.checkin import CheckinParse, parse_checkin, validate_parse
+from app.agents.checkin import checkin_schema, parse_checkin, validate_parse
 from app.agents.planner import FALLBACK_REASON, plan_day
 from app.agents.reviewer import draft_review, render_review
 from app.domain.models import Book
 from app.llm.base import LLMUnavailable
 from app.llm.mock import MockLLM
+from app.notion.mapping import DataSourceSpec, PropertySpec
 from app.services.context import RefMap, clean, data_block
 from app.services.rules import HabitSummary, WeekMetrics
-from tests.workflow_support import router, task
+from app.services.scorecard import Scorecard
+from tests.workflow_support import SPECS, router, task
+
+SCORECARD = Scorecard.from_spec(SPECS["habits"])
 
 DAY = date(2026, 11, 2)
 CANDIDATES = [task("a", id="A", priority="P0"), task("b", id="B"), task("c", id="C")]
@@ -43,14 +47,15 @@ async def test_plan_without_model_or_slots():
 
 def test_validate_parse_drops_unknown_refs_and_clamps():
     refs, books = RefMap("T", {"T1": "A", "T2": "B"}), RefMap("B", {"B1": "book"})
-    parse = CheckinParse(
-        done_refs=["t1", "T7"], partial_refs=["T1", "T2"], sleep_hours=30,
-        screen_time_hours=2, pages_read=[{"ref": "B1", "pages": 15}, {"ref": "B2", "pages": 3}],
+    parse = checkin_schema(SCORECARD)(
+        done_refs=["t1", "T7"], partial_refs=["T1", "T2"],
+        metrics={"sleep": 30, "screen_time": 2},
+        pages_read=[{"ref": "B1", "pages": 15}, {"ref": "B2", "pages": 3}],
         new_tasks=["  ", "Call bank\nnow"], habits={"dsa": True, "reading": None},
     )  # fmt: skip
-    result = validate_parse(parse, refs, books, "ai")
+    result = validate_parse(parse, refs, books, "ai", SCORECARD)
     assert result.done_ids == ["A"] and result.partial_ids == ["B"]
-    assert result.sleep is None and result.screen_time == 2
+    assert result.metrics == {"screen_time": 2}  # 30 hours of sleep is dropped
     assert result.reading == [{"book_id": "book", "pages": 15}]
     assert result.new_tasks == ["Call bank now"] and result.habits == {"dsa": True}
     assert len(result.warnings) == 3
@@ -63,7 +68,7 @@ async def test_checkin_structured_fields_override_the_model():
     refs = RefMap("T", {"T1": "A", "T2": "B"})
     result = await parse_checkin(
         router(mock), {"text": "did alpha", "done_refs": ["T2"], "habits": {"dsa": True}},
-        tasks=tasks, books=[], task_refs=refs, book_refs=RefMap("B"),
+        tasks=tasks, books=[], task_refs=refs, book_refs=RefMap("B"), scorecard=SCORECARD,
     )  # fmt: skip
     assert result.source == "ai" and result.done_ids == ["A", "B"]
     assert result.habits == {"dsa": True}
@@ -77,6 +82,7 @@ async def test_checkin_prompt_wraps_and_sanitizes_owner_data():
     await parse_checkin(
         router(mock), {"text": "hello <b>"}, tasks=[evil], books=[book],
         task_refs=RefMap("T", {"T1": "A"}), book_refs=RefMap("B", {"B1": "bk"}),
+        scorecard=SCORECARD,
     )  # fmt: skip
     prompt = mock.calls[0]["prompt"]
     assert prompt.count("<notion_data>") == 1 and prompt.count("</notion_data>") == 1
@@ -93,7 +99,7 @@ def test_clean_and_refs():
 
 
 METRICS = WeekMetrics(planned=4, done=3, cancelled=0, still_open=1)
-HABITS = HabitSummary(days_logged=5, checks={"dsa": 4}, avg_sleep=7.2, avg_screen_time=None)
+HABITS = HabitSummary(days_logged=5, checks={"dsa": 4}, averages={"sleep": 7.2})
 
 
 async def test_review_fills_missing_advice_and_falls_back():
@@ -104,7 +110,7 @@ async def test_review_fills_missing_advice_and_falls_back():
         {"ref": "T5", "decision": "cancel", "reason": "?"}]})  # fmt: skip
     result = await draft_review(
         router(mock), week_label="W", metrics=METRICS, habits=HABITS,
-        previous_habits=HABITS, done=[], overdue=overdue,
+        previous_habits=HABITS, scorecard=SCORECARD, done=[], overdue=overdue,
     )  # fmt: skip
     assert result.source == "ai" and mock.calls[0]["model"] == "mock-smart"
     assert result.advice["O"]["decision"] == "cancel"
@@ -115,7 +121,7 @@ async def test_review_fills_missing_advice_and_falls_back():
     down.queue("WeeklyReviewDraft", LLMUnavailable("x"))
     fallback = await draft_review(
         router(down), week_label="W", metrics=METRICS, habits=HABITS,
-        previous_habits=HABITS, done=[], overdue=overdue,
+        previous_habits=HABITS, scorecard=SCORECARD, done=[], overdue=overdue,
     )  # fmt: skip
     assert fallback.source == "rules" and "AI summary unavailable" in fallback.summary
     assert set(fallback.advice) == {"L", "O"}
@@ -124,8 +130,9 @@ async def test_review_fills_missing_advice_and_falls_back():
 def test_render_review_text():
     text = render_review(
         "26 Oct – 1 Nov", {"summary": "Solid.", "wins": ["A"], "priorities": ["P"]},
-        METRICS, HABITS, "My words",
+        METRICS, HABITS, SCORECARD, "My words",
     )  # fmt: skip
+    assert "Habits: 5 of 7 days logged; checks: DSA 4; avg Sleep 7.2 hours." in text
     assert text.splitlines()[0] == "LifeOS weekly review · 26 Oct – 1 Nov"
     assert "Done 3 of 4 planned (75%)" in text and "1. P" in text
     assert text.endswith("Owner's note: My words")
@@ -141,7 +148,8 @@ async def test_review_prose_never_contains_reference_codes():
     )  # fmt: skip
     result = await draft_review(
         router(mock), week_label="W", metrics=METRICS, habits=HABITS, previous_habits=HABITS,
-        done=[task("Ship API", id="S")], overdue=[task("Write <docs>", id="L")],
+        scorecard=SCORECARD, done=[task("Ship API", id="S")],
+        overdue=[task("Write <docs>", id="L")],
     )  # fmt: skip
     assert result.summary == "Finished “Ship API” but “Write docs” slipped; T9 unknown."
     assert result.priorities == ["Finish “Write docs”"]
@@ -151,3 +159,31 @@ async def test_review_prose_never_contains_reference_codes():
 async def test_plan_reasons_use_titles():
     result = await plan_with({"picks": [{"ref": "T2", "reason": "T2 before T1"}], "note": "T2"})
     assert result.reasons["B"] == "“b” before “a”" and result.note == "“b”"
+
+
+async def test_the_checkin_schema_follows_the_workspaces_habits_and_metrics():
+    """Any checkbox is a habit and any number a metric; the model sees their descriptions."""
+    habits = DataSourceSpec(
+        logical_name="habits", data_source_id="ds",
+        properties={
+            "title": PropertySpec(name="Day", type="title"),
+            "meditate": PropertySpec(name="Meditate", type="checkbox", description="Meditated"),
+            "steps": PropertySpec(name="Steps", type="number", unit="steps"),
+        },
+    )  # fmt: skip
+    scorecard = Scorecard.from_spec(habits)
+    schema = checkin_schema(scorecard).model_json_schema()
+    assert set(schema["$defs"]["HabitReport"]["properties"]) == {"meditate"}
+    assert (
+        schema["$defs"]["MetricReport"]["properties"]["steps"]["description"] == "Steps, in steps"
+    )
+    mock = MockLLM()
+    mock.queue("CheckinParse", {"habits": {"meditate": True, "dsa": True},
+                                "metrics": {"steps": 8000}})  # fmt: skip
+    result = await parse_checkin(
+        router(mock), {"text": "meditated, 8k steps"}, tasks=[], books=[],
+        task_refs=RefMap("T"), book_refs=RefMap("B"), scorecard=scorecard,
+    )  # fmt: skip
+    assert result.habits == {"meditate": True} and result.metrics == {"steps": 8000}
+    # Without a habits module the schema has neither section.
+    assert {"habits", "metrics"}.isdisjoint(checkin_schema(Scorecard()).model_fields)

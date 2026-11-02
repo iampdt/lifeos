@@ -26,6 +26,7 @@ from app.domain.models import Book, Goal, Task
 from app.llm.gemini import GeminiProvider
 from app.llm.router import LLMRouter
 from app.services.context import RefMap
+from app.services.scorecard import Habit, Metric, Scorecard
 from evals.scoring import CaseScore, Summary, score_checkin, score_plan, summarise
 
 CASES = Path(__file__).parent / "cases"
@@ -75,7 +76,19 @@ def _no_answer(case: dict[str, Any]) -> CaseScore:
     return CaseScore(case["id"], False, ["no model answer"], bool(case.get("adversarial")), True)
 
 
-async def run_checkin(provider, model, cases) -> tuple[list[CaseScore], list[dict], int]:
+def load_scorecard(data: dict[str, Any]) -> Scorecard:
+    return Scorecard(
+        habits=tuple(Habit(k, k.replace("_", " ").title(), d) for k, d in data["habits"].items()),
+        metrics=tuple(
+            Metric(k, k.replace("_", " ").title(), m.get("unit"), m.get("description"))
+            for k, m in data["metrics"].items()
+        ),
+    )
+
+
+async def run_checkin(
+    provider, model, cases, scorecard: Scorecard
+) -> tuple[list[CaseScore], list[dict], int]:
     scores, usage, errors = [], [], 0
     for case in cases:
         tasks = [_task(i, t) for i, t in enumerate(case["tasks"])]
@@ -93,7 +106,7 @@ async def run_checkin(provider, model, cases) -> tuple[list[CaseScore], list[dic
                        message=case["message"]):  # fmt: skip
             return await parse_checkin(
                 _router(provider, model), {"text": message}, tasks=tasks, books=books,
-                task_refs=task_refs, book_refs=book_refs,
+                task_refs=task_refs, book_refs=book_refs, scorecard=scorecard,
             )  # fmt: skip
 
         result = await _with_retry(call)
@@ -108,8 +121,8 @@ async def run_checkin(provider, model, cases) -> tuple[list[CaseScore], list[dic
             "done": [titles[i] for i in result.done_ids],
             "partial": [titles[i] for i in result.partial_ids],
             "habits": result.habits,
-            "sleep": result.sleep,
-            "screen_time": result.screen_time,
+            "sleep": result.metrics.get("sleep"),
+            "screen_time": result.metrics.get("screen_time"),
             "pages": {book_titles[r["book_id"]]: r["pages"] for r in result.reading},
             "learned": result.learned,
             "new_tasks": result.new_tasks,
@@ -151,13 +164,14 @@ async def evaluate(models: list[str], suites: set[str]) -> Results:
     settings = get_settings()
     assert settings.gemini_api_key is not None
     provider = GeminiProvider(settings.gemini_api_key.get_secret_value())
-    checkin = yaml.safe_load((CASES / "checkin.yaml").read_text())["cases"]
+    checkin_suite = yaml.safe_load((CASES / "checkin.yaml").read_text())
+    checkin, scorecard = checkin_suite["cases"], load_scorecard(checkin_suite["scorecard"])
     planning = yaml.safe_load((CASES / "planning.yaml").read_text())
     results: Results = {}
     for model in models:
         results[model] = {}
         if "checkin" in suites:
-            scores, usage, errors = await run_checkin(provider, model, checkin)
+            scores, usage, errors = await run_checkin(provider, model, checkin, scorecard)
             results[model]["checkin"] = (summarise(scores, usage), scores)
         if "planning" in suites:
             scores, usage, errors = await run_planning(provider, model, planning)

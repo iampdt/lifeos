@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import update
 
 from app.agents.common import ask_model
+from app.agents.reviewer import habits_line
 from app.db.models import AgentRun
 from app.domain.models import Task
 from app.execution.actions import ActionKind, CreateTask, MarkDone, SetStatus
@@ -92,7 +93,8 @@ Rules:
 - Propose tools don't change Notion: they create proposals the owner approves in the
   Approvals panel. Say a change is "proposed", never that it's done.
 - Only propose changes the owner asked for.
-- A day holds at most 3 major tasks. If a proposal is refused, explain the reason.
+- A day holds a limited number of major tasks (see LIMITS). If a proposal is refused,
+  explain the reason.
 - Answer briefly in plain text and name tasks by title, never by reference code.
 {DATA_RULES}"""
 
@@ -219,7 +221,10 @@ class ChatAgent:
         self, message: str, history: Sequence[dict[str, str]], results: list[str], left: int
     ) -> str:
         today = self.deps.today()
-        lines = [f"Today: {fmt_day(today)} ({self.deps.tz.key})."]
+        lines = [
+            f"Today: {fmt_day(today)} ({self.deps.tz.key}).",
+            f"LIMITS: at most {self.deps.rules.max_major_per_day} major tasks a day.",
+        ]
         recent = list(history)[-MAX_HISTORY:]
         if recent:
             lines.append("CONVERSATION SO FAR:")
@@ -255,14 +260,14 @@ class ChatAgent:
             case "get_week_summary":
                 start, end = week_range(today)
                 metrics = week_metrics(await ws.tasks.due_between(start, end), vocab)
-                habits = habit_summary(await ws.habits.all(), start, end)
                 text = (
                     f"WEEK {start.isoformat()} to {end.isoformat()}: planned {metrics.planned}, "
                     f"done {metrics.done}, still open {metrics.still_open}, "
-                    f"cancelled {metrics.cancelled}.\nHABITS: {habits.days_logged} days logged; "
-                    f"checks {habits.checks or 'none'}; avg sleep {habits.avg_sleep}; "
-                    f"avg screen time {habits.avg_screen_time}"
+                    f"cancelled {metrics.cancelled}."
                 )
+                if ws.habits:
+                    habits = habit_summary(await ws.habits.all(), start, end)
+                    text += "\nHABITS: " + habits_line(habits, deps.scorecard)
                 return data_block(text), []
             case "get_goals":
                 if not ws.goals:
@@ -274,7 +279,7 @@ class ChatAgent:
             case "get_reading":
                 if not ws.books:
                     return "Books aren't connected in this workspace.", []
-                reading = deps.specs["books"].prop("status").value("reading")
+                reading = ws.books.spec.prop("status").value("reading")
                 books = [b for b in await ws.books.queue() if b.status == reading]
                 lines = [book_line(f"B{i}", b) for i, b in enumerate(books, 1)]
                 return data_block("READING:\n" + ("\n".join(lines) or "(none)")), []
@@ -299,8 +304,9 @@ class ChatAgent:
                 day = self._future_day(step.date, today)
                 if vocab.status_key(task) in MAJOR_STATUSES and not task.recurring:
                     others = [t for t in await turn.active() if t.id != task.id]
-                    if free_slots(others, day, vocab) == 0:
-                        raise _Refused(f"{fmt_day(day)} already has 3 major tasks (R1)")
+                    if free_slots(others, day, vocab, deps.rules.max_major_per_day) == 0:
+                        limit = deps.rules.max_major_per_day
+                        raise _Refused(f"{fmt_day(day)} already has {limit} major tasks (R1)")
                 await builder.set_due(task.id, day, "reschedule", reason=reason,
                                       rule_ids=("R1",), title=task.title)  # fmt: skip
             case "propose_set_status":
@@ -315,8 +321,9 @@ class ChatAgent:
                 if not title:
                     raise _Refused("a title is required")
                 due = self._future_day(step.date, today) if step.date else None
-                if due and free_slots(await turn.active(), due, vocab) == 0:
-                    raise _Refused(f"{fmt_day(due)} already has 3 major tasks (R1)")
+                limit = deps.rules.max_major_per_day
+                if due and free_slots(await turn.active(), due, vocab, limit) == 0:
+                    raise _Refused(f"{fmt_day(due)} already has {limit} major tasks (R1)")
                 payload = CreateTask(title=title, status="next" if due else "inbox", due=due)
                 await builder.add(ActionKind.TASK_CREATE, payload, reason=reason,
                                   rule_ids=("R11",) if not due else ("R1",))  # fmt: skip

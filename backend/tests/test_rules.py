@@ -3,6 +3,7 @@ from datetime import date
 from app.domain.models import HabitDay
 from app.services.calendar import month_title, week_title
 from app.services.rules import (
+    HabitSummary,
     Vocabulary,
     allocate_days,
     fallback_order,
@@ -94,12 +95,15 @@ def test_week_metrics_r5():
 def test_habit_summary_merges_duplicate_days():
     def row(day, **checks):
         return HabitDay(id=str(day) + str(checks), url="", title="", last_edited_time=MON,
-                        day=day, checks=checks, sleep=7.0)  # fmt: skip
+                        day=day, checks=checks, metrics={"sleep": 7.0})  # fmt: skip
 
     rows = [row(MON, dsa=True), row(MON, dsa=False, workout=True), row(TUE, dsa=True)]
     summary = habit_summary(rows, MON, date(2026, 11, 8))
     assert summary.days_logged == 2 and summary.checks == {"dsa": 2, "workout": 1}
-    assert summary.avg_sleep == 7.0 and summary.avg_screen_time is None
+    assert summary.averages == {"sleep": 7.0}
+    legacy = HabitSummary.from_dict({"days_logged": 3, "checks": {}, "avg_sleep": 6.5,
+                                     "avg_screen_time": None})  # fmt: skip
+    assert legacy.averages == {"sleep": 6.5}  # a run saved before metrics were generic
     assert missing_scorecard_days(rows, MON, date(2026, 11, 4)) == [date(2026, 11, 4)]
 
 

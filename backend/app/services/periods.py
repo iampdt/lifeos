@@ -33,17 +33,24 @@ class PeriodTarget:
 
 
 class PeriodResolver:
-    def __init__(self, weeks: PeriodRepository, months: PeriodRepository, today: date) -> None:
+    """`weeks` or `months` is None when the workspace doesn't link tasks to those pages."""
+
+    def __init__(
+        self, weeks: PeriodRepository | None, months: PeriodRepository | None, today: date
+    ) -> None:
         self._repos = {"week": weeks, "month": months}
         self.today = today
         self._cache: dict[tuple[PeriodKind, date], PeriodTarget] = {}
 
-    async def resolve(self, kind: PeriodKind, day: date) -> PeriodTarget:
+    async def resolve(self, kind: PeriodKind, day: date) -> PeriodTarget | None:
+        repo = self._repos[kind]
+        if repo is None:
+            return None
         start, end = week_range(day) if kind == "week" else month_range(day)
         cached = self._cache.get((kind, start))
         if cached:
             return cached
-        pages = await self._repos[kind].covering(day)
+        pages = await repo.covering(day)
         if pages:
             page = pages[0]
             target = PeriodTarget(kind, start, end, page_id=page.id, review=page.review)

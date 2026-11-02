@@ -43,8 +43,8 @@ OTHER = "other@example.com"
 class EveryAccount(Contexts):
     """Gives every account a workspace, as connecting Notion will (multi-user step 9.3)."""
 
-    def for_user(self, user_id, *, is_owner):
-        return super().for_user(user_id, is_owner=True)
+    async def for_user(self, user_id, *, is_owner):
+        return await super().for_user(user_id, is_owner=True)
 
 
 class Env:
@@ -74,8 +74,8 @@ class Env:
         assert run["status"] == "waiting_approval"
         return run
 
-    def deps(self, user_id):
-        return self.contexts.for_user(user_id, is_owner=True).deps
+    async def deps(self, user_id):
+        return (await self.contexts.for_user(user_id, is_owner=True)).deps
 
 
 def two_accounts_app(session_factory):
@@ -108,7 +108,7 @@ async def env(session_factory):
 
 
 async def standalone_proposal(env: Env, user_id) -> str:
-    deps = env.deps(user_id)
+    deps = await env.deps(user_id)
     async with deps.session_factory() as db, db.begin():
         proposal, _ = await deps.proposals(db).propose(
             ActionKind.TASK_MARK_DONE,
@@ -174,10 +174,10 @@ async def test_the_same_suggestion_is_a_separate_proposal_per_account(env):
 
 async def test_an_executor_only_executes_its_own_accounts_approvals(env):
     mine = uuid.UUID(await standalone_proposal(env, OWNER_ID))
-    owner = env.deps(OWNER_ID)
+    owner = await env.deps(OWNER_ID)
     async with owner.session_factory() as db, db.begin():
         await owner.proposals(db).approve(mine)
-    intruder = env.deps(env.other_id).executor("test")
+    intruder = (await env.deps(env.other_id)).executor("test")
     result = await intruder.execute_one(mine)
     assert result.outcome == "skipped" and result.detail == "proposal is missing"
     assert await intruder.execute_approved() == []

@@ -60,6 +60,12 @@ function Details({ card }: { card: Card }) {
       );
     case "habit.upsert_day": {
       const checks = Object.entries((p.checks ?? {}) as Record<string, boolean>);
+      // Older proposals stored sleep and screen time as fields rather than metrics.
+      const metrics = Object.entries({
+        ...(p.sleep != null ? { sleep: p.sleep } : {}),
+        ...(p.screen_time != null ? { screen_time: p.screen_time } : {}),
+        ...((p.metrics ?? {}) as Record<string, number>),
+      });
       return (
         <span className="flex flex-wrap gap-1.5">
           {checks.map(([name, done]) => (
@@ -67,8 +73,9 @@ function Details({ card }: { card: Card }) {
               {done ? "✓" : "✗"} {humanize(name)}
             </Badge>
           ))}
-          {p.sleep != null && <Badge variant="outline">Sleep {String(p.sleep)} h</Badge>}
-          {p.screen_time != null && <Badge variant="outline">Screen {String(p.screen_time)} h</Badge>}
+          {metrics.map(([name, value]) => (
+            <Badge key={name} variant="outline">{humanize(name)} {String(value)}</Badge>
+          ))}
           {p.notes ? <span className="w-full text-xs text-muted-foreground">Notes: {String(p.notes)}</span> : null}
         </span>
       );

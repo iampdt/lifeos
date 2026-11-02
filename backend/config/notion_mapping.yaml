@@ -17,12 +17,9 @@ data_sources:
       due: {name: Due, type: date}
       completed: {name: Completed, type: date}
       area: {name: Area, type: select}
-      estimated_time: {name: Estimated Time, type: select}
-      energy: {name: Energy, type: select}
       recurring: {name: Recurring, type: checkbox}
       created: {name: Created, type: created_time}
       goal: {name: Goal, type: relation}
-      career_evidence: {name: Career Evidence, type: relation}
       week: {name: Week, type: relation}
       month: {name: Month, type: relation}
       week_key: {name: Week Key, type: formula}
@@ -44,22 +41,24 @@ data_sources:
       deadline: {name: Deadline, type: date}
       review_notes: {name: Review Notes, type: rich_text}
 
+  # Every checkbox is a habit and every number a metric; descriptions say what counts.
   habits:
     env: NOTION_DS_HABITS
     database_env: NOTION_DB_HABITS
+    date_format: "%d/%m/%Y"  # the title holds the day
     properties:
       title: {name: Date, type: title}
-      woke_on_time: {name: Woke On Time, type: checkbox}
-      dsa: {name: DSA, type: checkbox}
-      deep_work: {name: Deep Work, type: checkbox}
-      technical_learning: {name: Technical Learning, type: checkbox}
-      workout: {name: Workout, type: checkbox}
-      protein_target: {name: Protein Target, type: checkbox}
-      reading: {name: Reading, type: checkbox}
-      speech_practice: {name: Speech Practice, type: checkbox}
-      daily_highlight: {name: Daily Highlight, type: checkbox}
-      sleep: {name: Sleep, type: number}
-      screen_time: {name: Screen Time, type: number}
+      woke_on_time: {name: Woke On Time, type: checkbox, description: Woke up on time}
+      dsa: {name: DSA, type: checkbox, description: Did DSA / coding-interview practice}
+      deep_work: {name: Deep Work, type: checkbox, description: Did a deep-work block}
+      technical_learning: {name: Technical Learning, type: checkbox, description: Studied a technical topic}
+      workout: {name: Workout, type: checkbox, description: Worked out / exercised}
+      protein_target: {name: Protein Target, type: checkbox, description: Hit the protein target}
+      reading: {name: Reading, type: checkbox, description: Read a book}
+      speech_practice: {name: Speech Practice, type: checkbox, description: Did speech practice}
+      daily_highlight: {name: Daily Highlight, type: checkbox, description: "Completed the day's highlight"}
+      sleep: {name: Sleep, type: number, unit: hours, description: Hours slept last night}
+      screen_time: {name: Screen Time, type: number, unit: hours, description: Phone screen time}
       notes: {name: Notes, type: rich_text}
 
   weeks:

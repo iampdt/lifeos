@@ -60,6 +60,9 @@ def test_parse_habit_title(title, expected):
     assert parse_habit_title(title) == expected
 
 
-def test_habit_titles_round_trip_in_dd_mm_yyyy():
-    assert format_habit_title(date(2026, 11, 1)) == "01/11/2026"
-    assert parse_habit_title(format_habit_title(date(2027, 3, 9))) == date(2027, 3, 9)
+def test_habit_titles_follow_the_workspace_format():
+    assert format_habit_title(date(2026, 11, 1)) == "2026-11-01"  # ISO unless told otherwise
+    assert format_habit_title(date(2026, 11, 1), "%d/%m/%Y") == "01/11/2026"
+    for fmt in (None, "%d/%m/%Y", "%B %d, %Y"):
+        title = format_habit_title(date(2027, 3, 9), fmt)
+        assert parse_habit_title(title, fmt) == date(2027, 3, 9)

@@ -115,7 +115,8 @@ class TaskRepository(Repository):
         return await self.query(self.views.overdue(today))
 
     async def inbox(self) -> list[Task]:
-        return await self.query(self.views.inbox())
+        query = self.views.inbox()
+        return await self.query(query) if query else []
 
     async def next_7_days(self, today: date) -> list[Task]:
         return await self.query(self.views.next_7_days(today))
@@ -160,40 +161,34 @@ class GoalRepository(Repository):
 
 
 class HabitRepository(Repository):
-    CHECK_FIELDS = (
-        "woke_on_time",
-        "dsa",
-        "deep_work",
-        "technical_learning",
-        "workout",
-        "protein_target",
-        "reading",
-        "speech_practice",
-        "daily_highlight",
-    )
+    """One row per day. Every checkbox property is a habit and every number property a metric.
+    The day comes from a date property when the mapping has one, otherwise from the title."""
 
     def to_domain(self, page: Page) -> HabitDay:
-        title = self._text(page, "title")
+        day = self._date(page, "day") if self.spec.has("day") else None
+        metrics: dict[str, float] = {}
+        for name in self.spec.metric_fields:
+            value = self._value(page, name)
+            if isinstance(value, int | float):
+                metrics[name] = float(value)
         return HabitDay(
             **self._base(page),
-            day=parse_habit_title(title),
-            checks={
-                f: bool(self._value(page, f))
-                for f in self.CHECK_FIELDS
-                if f in self.spec.properties
-            },
-            sleep=self._value(page, "sleep"),
-            screen_time=self._value(page, "screen_time"),
+            day=day or parse_habit_title(self._text(page, "title"), self.spec.date_format),
+            checks={name: bool(self._value(page, name)) for name in self.spec.habit_fields},
+            metrics=metrics,
             notes=self._text(page, "notes"),
         )
 
     async def all(self) -> list[HabitDay]:
-        # Rows are keyed by a text title, which Notion can't filter as a date, so the
-        # repository reads every row and parses titles. Fine at one row per day.
+        # Fine at one row per day. Rows keyed by a text title can't be filtered by date anyway.
         return [self.to_domain(page) for page in await self._pages()]
 
     async def for_day(self, day: date) -> list[HabitDay]:
-        """All rows whose title parses to `day` (normally 0 or 1; more means a duplicate)."""
+        """All rows for `day` (normally 0 or 1; more means a duplicate)."""
+        if self.spec.has("day"):
+            prop = self.spec.prop("day")
+            query = QuerySpec({"property": prop.name, "date": {"equals": day.isoformat()}})
+            return [self.to_domain(page) for page in await self._pages(query)]
         return [row for row in await self.all() if row.day == day]
 
 

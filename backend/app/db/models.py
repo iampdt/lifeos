@@ -209,3 +209,21 @@ class NotionConnection(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     refreshed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Workspace(Base):
+    """An account's own workspace: which data source and properties each module uses (built
+    during onboarding) and the account's parameters for the rules."""
+
+    __tablename__ = "workspaces"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    # Module name → DataSourceSpec as JSON (app/workspaces/store.py).
+    mapping: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    timezone: Mapped[str] = mapped_column(String(64))
+    max_major_per_day: Mapped[int] = mapped_column(Integer, default=3)  # R1
+    # When the weekly review is due (used by per-account scheduling): Monday is 0.
+    review_weekday: Mapped[int] = mapped_column(Integer, default=6)
+    review_time: Mapped[str] = mapped_column(String(5), default="18:00")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

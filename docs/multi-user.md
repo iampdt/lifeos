@@ -132,7 +132,7 @@ whose local time has reached a scheduled routine that hasn't run today, the API 
 | 9.1 | Google sign-in and account linking; passwords only where Google isn't configured | Done |
 | 9.2 | Multi-tenancy: `user_id` everywhere, per-account contexts, isolation tests, delete account | Done |
 | 9.3 | Notion OAuth connect, encrypted tokens with refresh, disconnect | Done |
-| 9.4 | Generic workspace model: modules, mappings, onboarding UI, template, generic habits, per-user rules | |
+| 9.4 | Generic workspace model: modules, mappings, onboarding UI, template, generic habits, per-user rules | In progress: generic engine and saved mappings done |
 | 9.5 | AI allowance, own-key option, disclosure and consent | |
 | 9.6 | Per-user scheduling | |
 | 9.7 | Privacy and terms pages, Notion review submission, the owner's migration to the new flow, rollout | |

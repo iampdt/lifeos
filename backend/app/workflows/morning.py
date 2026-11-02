@@ -19,7 +19,6 @@ from langgraph.graph import END, START, StateGraph
 from app.agents.planner import plan_day
 from app.services.calendar import week_range
 from app.services.rules import (
-    MAX_MAJOR_PER_DAY,
     allocate_days,
     fallback_order,
     is_open,
@@ -58,8 +57,12 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
         active = await ws.tasks.active()
         week_start, _ = week_range(today)
         done = await ws.tasks.done_due_between(week_start, today)
-        rows = await ws.habits.all()
-        missing = missing_scorecard_days(rows, today - timedelta(days=3), today - timedelta(days=1))
+        rows = await ws.habits.all() if ws.habits else None
+        missing = (
+            missing_scorecard_days(rows, today - timedelta(days=3), today - timedelta(days=1))
+            if rows is not None
+            else []
+        )
         return {
             "today": today.isoformat(),
             "tasks": dump_tasks(active),
@@ -73,22 +76,27 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
         active = load_tasks(state["tasks"])
         majors = major_tasks(active, today, vocab)
         goals = await ws.goals.active() if ws.goals else []
-        if len(majors) > MAX_MAJOR_PER_DAY:
+        if len(majors) > deps.rules.max_major_per_day:
             result = await plan_day(
-                deps.llm, day=today, slots=MAX_MAJOR_PER_DAY, candidates=majors,
+                deps.llm, day=today, slots=deps.rules.max_major_per_day, candidates=majors,
                 goals=goals, mode="keep",
             )  # fmt: skip
             keep = result.task_ids
             deferred = [t for t in majors if t.id not in keep]
             placed = allocate_days(
-                deferred, active, today + timedelta(days=1), today + timedelta(days=7), vocab
-            )
+                deferred, active, today + timedelta(days=1), today + timedelta(days=7), vocab,
+                deps.rules.max_major_per_day,
+            )  # fmt: skip
             defer = {k: v.isoformat() if v else None for k, v in placed.items()}
             data = {"mode": "trim", "keep_ids": keep, "defer": defer}
         elif not majors and (state.get("inputs") or {}).get("plan_if_empty", True):
             candidates = planning_candidates(active, today, vocab)
             result = await plan_day(
-                deps.llm, day=today, slots=MAX_MAJOR_PER_DAY, candidates=candidates, goals=goals
+                deps.llm,
+                day=today,
+                slots=deps.rules.max_major_per_day,
+                candidates=candidates,
+                goals=goals,
             )
             data = {"mode": "fill", "pick_ids": result.task_ids}
         else:

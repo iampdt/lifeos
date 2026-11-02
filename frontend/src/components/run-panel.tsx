@@ -60,12 +60,15 @@ function Notice({ tone, title, children }: { tone: "error" | "info"; title: stri
 function QuestionStep({ request, onAnswer }: { request: QuestionRequest; onAnswer: (a: unknown) => void }) {
   const [text, setText] = useState("");
   const [done, setDone] = useState<Set<string>>(new Set());
-  const logged = request.habits.logged_today?.checks ?? {};
+  const fields =
+    request.habits?.fields ??
+    (request.habits?.names ?? []).map((key) => ({ key, name: humanize(key), description: null }));
+  const metrics = request.habits?.metrics ?? [];
+  const logged = request.habits?.logged_today?.checks ?? {};
   const [habits, setHabits] = useState<Record<string, boolean>>(
-    Object.fromEntries(request.habits.names.map((n) => [n, Boolean(logged[n])])),
+    Object.fromEntries(fields.map((f) => [f.key, Boolean(logged[f.key])])),
   );
-  const [sleep, setSleep] = useState("");
-  const [screen, setScreen] = useState("");
+  const [values, setValues] = useState<Record<string, string>>({});
 
   function submit() {
     const answer: Record<string, unknown> = {};
@@ -73,8 +76,10 @@ function QuestionStep({ request, onAnswer }: { request: QuestionRequest; onAnswe
     if (done.size) answer.done_refs = [...done];
     const ticked = Object.fromEntries(Object.entries(habits).filter(([n, v]) => v && !logged[n]));
     if (Object.keys(ticked).length) answer.habits = ticked;
-    if (sleep) answer.sleep_hours = Number(sleep);
-    if (screen) answer.screen_time_hours = Number(screen);
+    const numbers = Object.fromEntries(
+      Object.entries(values).filter(([, v]) => v.trim() !== "").map(([k, v]) => [k, Number(v)]),
+    );
+    if (Object.keys(numbers).length) answer.metrics = numbers;
     onAnswer(answer);
   }
 
@@ -109,33 +114,37 @@ function QuestionStep({ request, onAnswer }: { request: QuestionRequest; onAnswe
           Reading: {request.books.map((b) => b.title).join(", ")}. Mention pages read in your own words.
         </p>
       )}
-      <section className="flex flex-col gap-2">
-        <h3 className="text-sm font-medium">Scorecard</h3>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {request.habits.names.map((name) => (
-            <label key={name} className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={habits[name]}
-                disabled={Boolean(logged[name])}
-                onCheckedChange={(checked) => setHabits({ ...habits, [name]: Boolean(checked) })}
-              />
-              {humanize(name)}
-            </label>
-          ))}
-        </div>
-        <div className="flex gap-3">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="sleep" className="text-xs">Sleep (hours)</Label>
-            <Input id="sleep" type="number" min={0} max={24} step={0.5} className="w-28"
-              value={sleep} onChange={(e) => setSleep(e.target.value)} />
+      {(fields.length > 0 || metrics.length > 0) && (
+        <section className="flex flex-col gap-2">
+          <h3 className="text-sm font-medium">Scorecard</h3>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {fields.map((field) => (
+              <label key={field.key} className="flex items-center gap-2 text-sm" title={field.description ?? undefined}>
+                <Checkbox
+                  checked={habits[field.key]}
+                  disabled={Boolean(logged[field.key])}
+                  onCheckedChange={(checked) => setHabits({ ...habits, [field.key]: Boolean(checked) })}
+                />
+                {field.name}
+              </label>
+            ))}
           </div>
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="screen" className="text-xs">Screen time (hours)</Label>
-            <Input id="screen" type="number" min={0} max={24} step={0.5} className="w-28"
-              value={screen} onChange={(e) => setScreen(e.target.value)} />
-          </div>
-        </div>
-      </section>
+          {metrics.length > 0 && (
+            <div className="flex flex-wrap gap-3">
+              {metrics.map((metric) => (
+                <div key={metric.key} className="flex flex-col gap-1">
+                  <Label htmlFor={`metric-${metric.key}`} className="text-xs">
+                    {metric.name}{metric.unit ? ` (${metric.unit})` : ""}
+                  </Label>
+                  <Input id={`metric-${metric.key}`} type="number" min={0} step="any" className="w-28"
+                    value={values[metric.key] ?? ""}
+                    onChange={(e) => setValues({ ...values, [metric.key]: e.target.value })} />
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
       <section className="flex flex-col gap-2">
         <Label htmlFor="checkin-text">Anything else, in your own words</Label>
         <Textarea id="checkin-text" rows={4} value={text} onChange={(e) => setText(e.target.value)}

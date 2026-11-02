@@ -82,6 +82,7 @@ async def callback(
             raise NotionOAuthError("cancelled", "no authorisation code")
         grant = await connections.oauth.exchange(code)
         await connections.save(attempt.user_id, grant)
+        await svc.contexts.forget(attempt.user_id)
     except NotionOAuthError as exc:
         return RedirectResponse(f"/settings?notion_error={exc.code}", status_code=302)
     return RedirectResponse("/settings?notion=connected", status_code=302)
@@ -109,6 +110,7 @@ async def connection(request: Request, principal: CurrentUser) -> dict[str, Any]
 @router.post("/notion/disconnect")
 async def disconnect(request: Request, principal: CurrentUser) -> dict[str, Any]:
     was_connected, revoked = await _connections(request).disconnect(principal.user_id)
+    await services(request).contexts.forget(principal.user_id)
     if not was_connected:
         raise ApiError(409, "not_connected", "Notion isn't connected")
     return {"status": "disconnected", "revoked": revoked}

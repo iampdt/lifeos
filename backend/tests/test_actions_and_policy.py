@@ -27,9 +27,11 @@ from tests.factories import specs, task_page
 SPECS = specs()
 
 
-def test_set_due_must_link_the_new_week_and_month():
-    with pytest.raises(ValidationError):
-        SetDue(page_id="t", new_due=date(2026, 11, 3), decision="carry_forward")
+def test_set_due_links_are_optional_but_never_both_kinds():
+    """Workspaces without weekly/monthly pages just move the date."""
+    plain = SetDue(page_id="t", new_due=date(2026, 11, 3), decision="carry_forward")
+    plan = build_plan(ActionKind.TASK_SET_DUE, plain, SPECS)
+    assert plan.values == {"due": date(2026, 11, 3)}
     with pytest.raises(ValidationError):  # both a page and a proposal for the same period
         SetDue(
             page_id="t", new_due=date(2026, 11, 3), decision="carry_forward",
@@ -41,9 +43,13 @@ def test_payloads_reject_unknown_fields_and_bad_values():
     with pytest.raises(ValidationError):
         MarkDone(page_id="t", completed_on=date(2026, 11, 1), delete=True)
     with pytest.raises(ValidationError):
-        UpsertHabitDay(day=date(2026, 11, 1), checks={"gaming": True})
-    with pytest.raises(ValidationError):
-        UpsertHabitDay(day=date(2026, 11, 1), sleep=30)
+        UpsertHabitDay(day=date(2026, 11, 1), metrics={"sleep": -1})
+    with pytest.raises(ValueError, match="not habits or metrics"):  # unknown in this workspace
+        build_plan(
+            ActionKind.HABIT_UPSERT_DAY,
+            UpsertHabitDay(day=date(2026, 11, 1), checks={"gaming": True}),
+            SPECS,
+        )
     with pytest.raises(ValidationError):
         CreatePeriod(title="W", start=date(2026, 11, 8), end=date(2026, 11, 2))
     with pytest.raises(ValidationError):
@@ -104,19 +110,24 @@ def test_read_fields_returns_comparable_values():
 
 
 def test_allowlist_refuses_fields_outside_it():
-    check_plan(WritePlan("tasks", "t", {"status": "Done", "due": date(2026, 1, 1)}))
+    tasks, goals, habits = SPECS["tasks"], SPECS["goals"], SPECS["habits"]
+    check_plan(WritePlan("tasks", "t", {"status": "Done", "due": date(2026, 1, 1)}), tasks)
     with pytest.raises(PermissionDenied):
-        check_plan(WritePlan("tasks", "t", {"career_evidence": ["x"]}))
+        check_plan(WritePlan("tasks", "t", {"career_evidence": ["x"]}), tasks)
     with pytest.raises(PermissionDenied):
-        check_plan(WritePlan("goals", "g", {"status": "Done"}))
+        check_plan(WritePlan("goals", "g", {"status": "Done"}), goals)
     with pytest.raises(PermissionDenied):
-        check_plan(WritePlan("feedback", "f", {"title": "x"}))
+        check_plan(WritePlan("feedback", "f", {"title": "x"}), tasks)
+    # Habits allow exactly the workspace's checkboxes and numbers, plus title, day and notes.
+    check_plan(WritePlan("habits", None, {"title": "x", "dsa": True, "sleep": 7}), habits)
+    with pytest.raises(PermissionDenied):
+        check_plan(WritePlan("habits", None, {"gaming": True}), habits)
 
 
 def test_close_period_writes_review_and_closed_status():
     plan = build_plan(ActionKind.WEEK_CLOSE, ClosePeriod(page_id="w", review="Good week"), SPECS)
     assert plan == WritePlan("weeks", "w", {"review": "Good week", "status": "Closed"})
-    check_plan(plan)
+    check_plan(plan, SPECS["weeks"])
     month = build_plan(ActionKind.MONTH_CLOSE, ClosePeriod(page_id="m", review="x"), SPECS)
     assert month.data_source == "months"
 
@@ -125,7 +136,7 @@ def test_book_progress_plan_and_validation():
     payload = UpdateBookProgress(page_id="b", pages_read=120, status="reading")
     plan = build_plan(ActionKind.BOOK_UPDATE_PROGRESS, payload, SPECS)
     assert plan.values == {"status": "Reading", "pages_read": 120}
-    check_plan(plan)
+    check_plan(plan, SPECS["books"])
     with pytest.raises(ValidationError):
         UpdateBookProgress(page_id="b")
     with pytest.raises(ValidationError):

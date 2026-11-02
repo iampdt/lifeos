@@ -15,7 +15,7 @@ from statistics import mean
 from app.domain.models import HabitDay, Task
 from app.notion.mapping import DataSourceSpec
 
-MAX_MAJOR_PER_DAY = 3  # R1
+MAX_MAJOR_PER_DAY = 3  # R1's default; each workspace can set its own limit
 MAJOR_STATUSES = frozenset({"next", "doing"})
 CLOSED_STATUSES = frozenset({"done", "cancelled"})
 
@@ -27,7 +27,10 @@ class Vocabulary:
 
     @classmethod
     def from_spec(cls, tasks: DataSourceSpec) -> Vocabulary:
-        return cls(dict(tasks.prop("status").values), dict(tasks.prop("priority").values))
+        priority = tasks.properties.get("priority")
+        # Priority keys p0, p1, … sort from highest to lowest, whatever the options are called.
+        ranked = dict(sorted((priority.values if priority else {}).items()))
+        return cls(dict(tasks.prop("status").values), ranked)
 
     def status_key(self, task: Task) -> str | None:
         for key, name in self.status.items():
@@ -57,8 +60,10 @@ def major_tasks(tasks: Iterable[Task], day: date, vocab: Vocabulary) -> list[Tas
     return fallback_order([t for t in tasks if is_major(t, day, vocab)], vocab)
 
 
-def free_slots(tasks: Iterable[Task], day: date, vocab: Vocabulary) -> int:
-    return max(0, MAX_MAJOR_PER_DAY - len(major_tasks(tasks, day, vocab)))
+def free_slots(
+    tasks: Iterable[Task], day: date, vocab: Vocabulary, limit: int = MAX_MAJOR_PER_DAY
+) -> int:
+    return max(0, limit - len(major_tasks(tasks, day, vocab)))
 
 
 def fallback_order(tasks: Iterable[Task], vocab: Vocabulary) -> list[Task]:
@@ -106,6 +111,7 @@ def allocate_days(
     start: date,
     end: date,
     vocab: Vocabulary,
+    limit: int = MAX_MAJOR_PER_DAY,
 ) -> dict[str, date | None]:
     """Give each task (in the order given) the earliest day in [start, end] with a free
     major-task slot (R1). Tasks that can't fit get None. Tasks being placed don't count
@@ -122,7 +128,7 @@ def allocate_days(
         day = start
         placed[task.id] = None
         while day <= end:
-            if not counts_as_major or load[day] < MAX_MAJOR_PER_DAY:
+            if not counts_as_major or load[day] < limit:
                 placed[task.id] = day
                 if counts_as_major:
                     load[day] += 1
@@ -181,8 +187,16 @@ def week_metrics(tasks_due_in_week: Iterable[Task], vocab: Vocabulary) -> WeekMe
 class HabitSummary:
     days_logged: int
     checks: dict[str, int]  # habit → days checked
-    avg_sleep: float | None
-    avg_screen_time: float | None
+    averages: dict[str, float] = field(default_factory=dict)  # metric → mean of logged values
+
+    @classmethod
+    def from_dict(cls, data: dict) -> HabitSummary:
+        """From a run's saved state, including runs saved before metrics were generic."""
+        averages = dict(data.get("averages") or {})
+        for old, key in (("avg_sleep", "sleep"), ("avg_screen_time", "screen_time")):
+            if data.get(old) is not None:
+                averages.setdefault(key, data[old])
+        return cls(data.get("days_logged", 0), dict(data.get("checks") or {}), averages)
 
 
 def habit_summary(rows: Iterable[HabitDay], start: date, end: date) -> HabitSummary:
@@ -196,13 +210,14 @@ def habit_summary(rows: Iterable[HabitDay], start: date, end: date) -> HabitSumm
     checks: Counter[str] = Counter()
     for day_checks in by_day.values():
         checks.update(name for name, checked in day_checks.items() if checked)
-    sleep = [r.sleep for r in in_range if r.sleep is not None]
-    screen = [r.screen_time for r in in_range if r.screen_time is not None]
+    values: dict[str, list[float]] = {}
+    for row in in_range:
+        for name, value in row.metrics.items():
+            values.setdefault(name, []).append(value)
     return HabitSummary(
         days_logged=len(by_day),
         checks=dict(sorted(checks.items())),
-        avg_sleep=round(mean(sleep), 1) if sleep else None,
-        avg_screen_time=round(mean(screen), 1) if screen else None,
+        averages={name: round(mean(v), 1) for name, v in sorted(values.items())},
     )
 
 

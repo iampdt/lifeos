@@ -22,11 +22,19 @@ from app.notion.mapping import DataSourceSpec
 from app.notion.workspace import NotionWorkspace, build_workspace
 from app.services.calendar import DEFAULT_TZ
 from app.services.periods import PeriodResolver
-from app.services.rules import Vocabulary
+from app.services.rules import MAX_MAJOR_PER_DAY, Vocabulary
+from app.services.scorecard import Scorecard
 
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+@dataclass(frozen=True)
+class RuleSettings:
+    """A workspace's parameters for the domain rules; the rule IDs stay the same."""
+
+    max_major_per_day: int = MAX_MAJOR_PER_DAY  # R1
 
 
 @dataclass
@@ -39,17 +47,19 @@ class WorkflowDeps:
     user_id: uuid.UUID
     tz: ZoneInfo = DEFAULT_TZ
     clock: Callable[[], datetime] = utcnow
+    rules: RuleSettings = field(default_factory=RuleSettings)
     workspace: NotionWorkspace = field(init=False)
     vocab: Vocabulary = field(init=False)
+    scorecard: Scorecard = field(init=False)
 
     def __post_init__(self) -> None:
+        tasks = self.specs.get("tasks")
+        if tasks is None or not tasks.configured:
+            raise ValueError("workflows need a tasks data source")
+        # Every other module is optional; the workflows skip what isn't mapped.
         self.workspace = build_workspace(self.notion, self.specs, self.tz)
-        self.vocab = Vocabulary.from_spec(self.specs["tasks"])
-        missing = [
-            n for n in ("tasks", "habits", "weeks", "months") if not self.specs[n].configured
-        ]
-        if missing:
-            raise ValueError(f"workflows need these data sources configured: {missing}")
+        self.vocab = Vocabulary.from_spec(tasks)
+        self.scorecard = Scorecard.from_spec(self.specs.get("habits"))
 
     def today(self) -> date:
         return self.clock().astimezone(self.tz).date()
@@ -70,5 +80,11 @@ class WorkflowDeps:
         return ProposalService(session, user_id=self.user_id, clock=self.clock, tz=self.tz)
 
     def resolver(self, today: date) -> PeriodResolver:
-        assert self.workspace.weeks and self.workspace.months
-        return PeriodResolver(self.workspace.weeks, self.workspace.months, today)
+        """Tasks link to weekly and monthly pages only where the workspace has both the
+        module and the task relation (R7)."""
+        tasks = self.specs["tasks"]
+        return PeriodResolver(
+            self.workspace.weeks if tasks.has("week") else None,
+            self.workspace.months if tasks.has("month") else None,
+            today,
+        )

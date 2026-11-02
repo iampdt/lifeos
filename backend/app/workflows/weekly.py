@@ -74,7 +74,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
         start, end = week_range(anchor)
         in_week = await ws.tasks.due_between(start, end)
         active = await ws.tasks.active()
-        rows = await ws.habits.all()
+        rows = await ws.habits.all() if ws.habits else []
         queue = overdue(active, end + timedelta(days=1), vocab)
         warnings = []
         if len(queue) > MAX_OVERDUE_DECISIONS:
@@ -85,7 +85,9 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
             queue = queue[:MAX_OVERDUE_DECISIONS]
         inbox = [t for t in active if vocab.status_key(t) == "inbox"][:MAX_INBOX_DECISIONS]
         first = max(end + timedelta(days=1), today + timedelta(days=1))
-        suggested = allocate_days(queue, active, first, first + timedelta(days=6), vocab)
+        suggested = allocate_days(
+            queue, active, first, first + timedelta(days=6), vocab, deps.rules.max_major_per_day
+        )
         overdue_refs, inbox_refs = RefMap("T"), RefMap("I")
         for task in queue:
             overdue_refs.add(task.id)
@@ -128,8 +130,9 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
             deps.llm,
             week_label=state["week"]["label"],
             metrics=_metrics_obj(state["metrics"]),
-            habits=HabitSummary(**state["habits"]["this_week"]),
-            previous_habits=HabitSummary(**state["habits"]["last_week"]),
+            habits=HabitSummary.from_dict(state["habits"]["this_week"]),
+            previous_habits=HabitSummary.from_dict(state["habits"]["last_week"]),
+            scorecard=deps.scorecard,
             done=done,
             overdue=queue,
             goals=goals,
@@ -155,6 +158,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
                 "week": state["week"],
                 "metrics": state["metrics"],
                 "habits": state["habits"],
+                "scorecard": deps.scorecard.describe(),
                 "review": {k: review.get(k) for k in
                            ("summary", "wins", "misses", "bottlenecks", "priorities", "source")},
                 "overdue": [
@@ -222,12 +226,17 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
                     title=state["titles"].get(task_id),
                 )  # fmt: skip
         page = state.get("week_page")
-        if page:
+        weeks = deps.specs.get("weeks")
+        can_close = weeks is not None and (
+            weeks.has("review") or weeks.has_value("status", "closed")
+        )
+        if page and can_close:
             text = render_review(
                 state["week"]["label"],
                 state["review"],
                 _metrics_obj(state["metrics"]),
-                HabitSummary(**state["habits"]["this_week"]),
+                HabitSummary.from_dict(state["habits"]["this_week"]),
+                deps.scorecard,
                 choices.get("note"),
             )
             if page.get("review"):
@@ -240,8 +249,8 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
                 rule_ids=("R9",),
                 title=state["week"]["label"],
             )
-        else:
-            warnings.append("This week has no Weekly Progress page, so there is nothing to close.")
+        elif ws.weeks and not page:
+            warnings.append("This week has no weekly page, so there is nothing to close.")
         next_start = date.fromisoformat(state["week"]["end"]) + timedelta(days=1)
         await builder.ensure_period(
             await resolver.resolve("week", next_start), "Next week's Weekly Progress page."
