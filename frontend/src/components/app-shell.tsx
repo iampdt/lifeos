@@ -22,6 +22,7 @@ const NAV = [
   { href: "/", label: "Command Center" },
   { href: "/tasks", label: "Tasks" },
   { href: "/goals", label: "Goals" },
+  { href: "/knowledge", label: "Knowledge" },
   { href: "/history", label: "History" },
   { href: "/weekly", label: "Reviews" },
   { href: "/activity", label: "Activity" },

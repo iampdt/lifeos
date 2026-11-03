@@ -9,7 +9,16 @@ from google import genai
 from google.genai import errors, types
 from pydantic import BaseModel, ValidationError
 
-from app.llm.base import Completion, LLMBadOutput, LLMError, LLMKeyRejected, LLMUnavailable
+from app.llm.base import (
+    EMBEDDING_DIMENSIONS,
+    Completion,
+    EmbeddingTask,
+    LLMBadOutput,
+    LLMError,
+    LLMKeyRejected,
+    LLMUnavailable,
+    normalise,
+)
 
 
 def _key_rejected(exc: errors.ClientError) -> bool:
@@ -38,6 +47,35 @@ class GeminiProvider:
             raise LLMUnavailable(f"{exc.code} {exc.status}") from exc
         except (TimeoutError, httpx.TimeoutException, httpx.TransportError) as exc:
             raise LLMUnavailable(type(exc).__name__) from exc
+
+    async def embed(
+        self, *, model: str, texts: list[str], task: EmbeddingTask, timeout_seconds: float
+    ) -> list[list[float]]:
+        config = types.EmbedContentConfig(
+            task_type="RETRIEVAL_DOCUMENT" if task == "document" else "RETRIEVAL_QUERY",
+            output_dimensionality=EMBEDDING_DIMENSIONS,
+            http_options=types.HttpOptions(timeout=int(timeout_seconds * 1000)),
+        )
+        try:
+            response = await asyncio.wait_for(
+                self._client.aio.models.embed_content(model=model, contents=texts, config=config),
+                timeout=timeout_seconds + 5,
+            )
+        except errors.ClientError as exc:
+            if exc.code in (404, 429):
+                raise LLMUnavailable(f"{model}: {exc.code} {exc.status}") from exc
+            if _key_rejected(exc):
+                raise LLMKeyRejected(f"{model}: {exc.code} {exc.status}") from exc
+            raise LLMError(f"{model}: {exc.code} {exc.status}") from exc
+        except errors.ServerError as exc:
+            raise LLMUnavailable(f"{model}: {exc.code} {exc.status}") from exc
+        except (TimeoutError, httpx.TimeoutException, httpx.TransportError) as exc:
+            raise LLMUnavailable(f"{model}: {type(exc).__name__}") from exc
+        vectors = [list(e.values or []) for e in response.embeddings or []]
+        if len(vectors) != len(texts) or any(len(v) != EMBEDDING_DIMENSIONS for v in vectors):
+            raise LLMBadOutput(f"{model}: expected {len(texts)} embeddings")
+        # Below full size the model's vectors aren't unit length; cosine search wants them so.
+        return [normalise(v) for v in vectors]
 
     async def generate_structured[T: BaseModel](
         self,

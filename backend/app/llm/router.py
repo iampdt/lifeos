@@ -14,6 +14,8 @@ from datetime import UTC, date, datetime
 from pydantic import BaseModel
 
 from app.llm.base import (
+    Embeddings,
+    EmbeddingTask,
     LLMBudgetExceeded,
     LLMError,
     LLMNotConfigured,
@@ -35,9 +37,11 @@ class LLMRouter:
         timeout_seconds: float = 30.0,
         daily_token_budget: int = 300_000,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        embedding_model: str = "gemini-embedding-001",
     ) -> None:
         self.provider = provider
         self.chains = chains
+        self.embedding_model = embedding_model
         self.timeout_seconds = timeout_seconds
         self.daily_token_budget = daily_token_budget
         self.clock = clock
@@ -92,3 +96,24 @@ class LLMRouter:
                 ),
             )
         raise LLMUnavailable("all models failed: " + " | ".join(failures))
+
+    async def embed(self, texts: list[str], *, task: EmbeddingTask) -> Embeddings:
+        """One model, no chain: vectors from different models can't be compared. The API
+        reports no token counts for embeddings, so about four characters count as a token."""
+        if self.provider is None:
+            raise LLMNotConfigured("no LLM provider configured")
+        if self.tokens_spent_today() >= self.daily_token_budget:
+            raise LLMBudgetExceeded("daily LLM token budget reached")
+        started = time.monotonic()
+        vectors = await self.provider.embed(
+            model=self.embedding_model, texts=texts, task=task,
+            timeout_seconds=self.timeout_seconds,
+        )  # fmt: skip
+        tokens = sum(len(t) for t in texts) // 4 + 1
+        today = self.clock().date()
+        self._spent[today] = self._spent.get(today, 0) + tokens
+        usage = LLMUsage(
+            provider=self.provider.name, model=self.embedding_model, input_tokens=tokens,
+            output_tokens=0, latency_ms=int((time.monotonic() - started) * 1000), fallbacks=0,
+        )  # fmt: skip
+        return Embeddings(vectors, usage)

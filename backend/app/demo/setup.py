@@ -20,6 +20,7 @@ from app.db.models import MemoryFact, User
 from app.db.session import async_url
 from app.demo.notion import InMemoryNotion
 from app.demo.seed import DEMO_ENV, seed_workspace
+from app.knowledge.index import clear_index
 from app.notion.mapping import DataSourceSpec, load_mapping
 from app.workflows.deps import WorkflowDeps
 
@@ -55,13 +56,19 @@ def demo_notion() -> InMemoryNotion:
 
 
 async def reset_demo(deps: WorkflowDeps) -> None:
-    """Fresh sample workspace and memory, and no runs, proposals or audit entries from earlier
-    visitors."""
+    """Fresh sample workspace, memory and knowledge index, and no runs, proposals or audit
+    entries from earlier visitors."""
     seed_workspace(deps.notion, deps.specs, deps.today())
     async with deps.session_factory() as db, db.begin():
         await db.execute(text(f"TRUNCATE {RESET_TABLES} RESTART IDENTITY CASCADE"))
         await db.execute(delete(MemoryFact).where(MemoryFact.user_id == deps.user_id))
         db.add_all(MemoryFact(user_id=deps.user_id, text=note, source="you") for note in DEMO_NOTES)
+        await clear_index(db, deps.user_id)
+    # The sample documents, embedded when the deployment's AI can (otherwise keyword search).
+    index = deps.knowledge()
+    for page_id, page in list(deps.notion.pages.items()):
+        if page["parent"].get("type") == "workspace":
+            await index.add(page_id)
 
 
 async def demo_user(session_factory: async_sessionmaker[AsyncSession]) -> User:

@@ -123,3 +123,56 @@ def seed_workspace(notion: InMemoryNotion, specs: dict[str, DataSourceSpec], tod
                                  "pages": 352, "pages_read": 120, "started": day(-9)})  # fmt: skip
     notion.seed(specs["books"], {"title": "Clean Architecture", "author": "Robert C. Martin",
                                  "status": "Want to Read", "pages": 432})  # fmt: skip
+
+    for title, blocks in DOCUMENTS:
+        notion.add_document(title, blocks)
+
+
+# Standalone pages for the knowledge index: what someone might keep next to their tasks.
+DOCUMENTS: list[tuple[str, list[tuple[str, str]]]] = [
+    ("Interview prep plan", [
+        ("paragraph", "Goal: a backend engineering offer by the end of the year. Two mock "
+                      "interviews a week until then, alternating system design and coding."),
+        ("heading_2", "System design"),
+        ("bulleted_list_item", "Practise one design a week out loud, 45 minutes, then write "
+                               "down what I missed."),
+        ("bulleted_list_item", "Always cover: requirements, capacity estimates, API, data "
+                               "model, scaling, failure modes."),
+        ("bulleted_list_item", "Weak spots so far: consistency trade-offs and back-of-the-"
+                               "envelope numbers."),
+        ("heading_2", "Coding"),
+        ("bulleted_list_item", "Three graph or dynamic programming problems on weekdays, "
+                               "timed to 30 minutes each."),
+        ("bulleted_list_item", "Explain the approach before writing code; state complexity "
+                               "at the end."),
+        ("heading_2", "Applications"),
+        ("paragraph", "Apply to two roles a week, only where the stack is Python or Go. "
+                      "Tailor the resume summary to each posting."),
+    ]),
+    ("Payments service onboarding", [
+        ("paragraph", "Notes from joining the payments team."),
+        ("heading_2", "Architecture"),
+        ("paragraph", "The payments service is a FastAPI app in front of Postgres. Card "
+                      "charges go through an outbox table and a worker, so a crash never "
+                      "charges twice: every charge has an idempotency key."),
+        ("heading_2", "On call"),
+        ("bulleted_list_item", "Alerts page the primary for failed charges above 2% for five "
+                               "minutes."),
+        ("bulleted_list_item", "First step for stuck charges: check the outbox worker's lag "
+                               "dashboard, then restart the worker."),
+        ("heading_2", "Testing"),
+        ("paragraph", "Unit tests use a fake card gateway; the nightly job runs the "
+                      "contract tests against the gateway's sandbox."),
+    ]),
+    ("Reading notes: Designing Data-Intensive Applications", [
+        ("heading_2", "Chapter 5: Replication"),
+        ("paragraph", "Single-leader replication is simple but the leader is a bottleneck "
+                      "for writes. Asynchronous followers can lag, which breaks read-your-"
+                      "writes unless reads of your own data go to the leader."),
+        ("paragraph", "Multi-leader and leaderless setups accept writes in several places "
+                      "and need conflict resolution: last write wins loses data, so prefer "
+                      "merging or asking the user."),
+        ("quote", "Replication lag is the source of most surprising bugs in distributed "
+                  "systems."),
+    ]),
+]  # fmt: skip

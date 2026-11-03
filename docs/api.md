@@ -27,7 +27,7 @@ Every error has the same shape:
 | --- | --- |
 | 401 | `unauthorized`, `invalid_credentials`, `bad_signature` |
 | 403 | `csrf_failed`, `password_sign_in_disabled`, `session_required`, `demo_account`, `environment_workspace`, `deployment_key` |
-| 404 | `unknown_workflow`, `unknown_job`, `unknown_note`, `http_error` |
+| 404 | `unknown_workflow`, `unknown_job`, `unknown_note`, `unknown_page`, `not_shared`, `http_error` |
 | 409 | `run_state` (run not found or not waiting), `run_owned` (decide it through its run), `no_workspace`, `notion_reconnect`, `not_connected`, `disclosure_changed` |
 | 422 | `invalid_request`, `confirmation_mismatch`, `invalid_mapping` (with `details`), `key_rejected` |
 | 429 | `rate_limited` (sign-in) |
@@ -124,6 +124,7 @@ Outcomes: `verified`, `noop`, `mismatch`, `stale`, `failed`, `blocked` (writes o
 | `tool` | `{name}`: a tool is being called |
 | `tool_refused` | `{name, reason}`: arguments failed validation or a rule (the model sees the reason) |
 | `proposal` | `{proposal}`: a pending proposal was created |
+| `sources` | `{sources: [{title, url}]}`, after the answer: indexed pages the answer names |
 | `memory_suggestion` | `{text}`: a note to remember; nothing is saved unless the account saves it (`POST /memory` with `source: "chat"`) |
 | `answer` | `{text}` |
 | `error` | `{code, message}` (for example `llm_unavailable`) |
@@ -190,6 +191,21 @@ the account, so these routes work before a workspace is set up.
 | `DELETE /memory/{id}` | 204, or 404 `unknown_note` |
 
 The demo answers every change with 403 `demo_account`.
+
+### Knowledge
+
+The account's knowledge index (architecture §5.9).
+
+| Method and path | Description |
+| --- | --- |
+| `GET /knowledge` | `{pages: [{id, page_id, title, url, passages, embedded, truncated, indexed_at, notion_edited_at}], limits: {pages}, editable}` |
+| `GET /knowledge/search-pages?q=` | Notion pages the connection can see whose title matches: `{results: [{page_id, title, url, edited_at, indexed}]}` |
+| `POST /knowledge/pages` | Body `{page_id}`. Reads, splits and stores the page (an indexed page is refreshed instead); 201 with the page and `warnings` (for example "searched by keyword only" when embeddings failed). 404 `not_shared`, 409 `knowledge_full` at 25 pages, 422 `empty_page` |
+| `POST /knowledge/pages/{id}/refresh` | Reads the page again; rebuilds it if Notion changed it (or it lacks embeddings). Returns the page with `changed` and `warnings`. 404 `unknown_page` or `not_shared` |
+| `DELETE /knowledge/pages/{id}` | 204, or 404 `unknown_page` |
+| `POST /knowledge/ask` | Body `{question}` (at most 500 characters). `{answer, found, source, search, citations, warnings}`: `source` is `ai`, or `search` when no model answered (`answer` is null and `citations` are the closest passages); `search` is `hybrid` or `keyword`; a citation is `{n, page_id, title, url, heading, excerpt}` and `n` matches the `[n]` in the answer |
+
+The demo answers every change with 403 `demo_account`; asking works.
 
 ### Pages
 

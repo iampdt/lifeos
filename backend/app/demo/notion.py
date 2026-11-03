@@ -98,6 +98,7 @@ class InMemoryNotion:
         identity: dict[str, Any] | None = None,
     ) -> None:
         self.pages: dict[str, dict[str, Any]] = {}
+        self.blocks: dict[str, list[dict[str, Any]]] = {}  # page or block id → children
         self.schemas: dict[str, dict[str, Any]] = {}  # data-source id → schema object
         self.update_calls = 0
         self.create_calls = 0
@@ -132,6 +133,7 @@ class InMemoryNotion:
 
     def clear(self) -> None:
         self.pages.clear()
+        self.blocks.clear()
 
     # --- helpers for seeding and tests --------------------------------------------------------
 
@@ -141,6 +143,20 @@ class InMemoryNotion:
             for name, body in encode_properties(spec.properties, values).items()
         }
         return self._new_page(spec.data_source_id, properties)["id"]
+
+    def add_document(self, title: str, blocks: list[tuple[str, str]]) -> str:
+        """A standalone page whose content is the given (block type, text) pairs, all at the
+        top level."""
+        page = self._new_page("", {"title": {"id": "title", "type": "title",
+                                             "title": [_text(title)]}})  # fmt: skip
+        page["parent"] = {"type": "workspace", "workspace": True}
+        self.blocks[page["id"]] = [_block(kind, text) for kind, text in blocks]
+        return page["id"]
+
+    def set_blocks(self, page_id: str, blocks: list[tuple[str, str]]) -> None:
+        """Simulate the owner rewriting a page's content."""
+        self.blocks[page_id] = [_block(kind, text) for kind, text in blocks]
+        self.pages[page_id]["last_edited_time"] = self._now()
 
     def edit(self, page_id: str, spec: DataSourceSpec, values: dict[str, Any]) -> None:
         """Simulate the owner editing a page in Notion."""
@@ -174,11 +190,25 @@ class InMemoryNotion:
         self, data_source_id: str, *, filter=None, sorts=None, page_size=100
     ):
         for page in list(self.pages.values()):
-            if page["parent"]["data_source_id"] == data_source_id and _matches(page, filter):
+            if page["parent"].get("data_source_id") == data_source_id and _matches(page, filter):
                 yield copy.deepcopy(page)
 
     async def get_relation_ids(self, page_id: str, property_id: str) -> list[str]:
         raise AssertionError("in-memory pages never truncate relations")
+
+    async def search_pages(self, query: str, *, page_size: int = 20) -> list[dict[str, Any]]:
+        words = query.lower().split()
+        found = [
+            copy.deepcopy(page) for page in self.pages.values()
+            if all(w in _title_of(page).lower() for w in words)
+        ]  # fmt: skip
+        return found[:page_size]
+
+    async def list_block_children(self, block_id: str):
+        if block_id not in self.blocks and block_id not in self.pages:
+            raise NotionNotShared("not found", status=404, code="object_not_found")
+        for block in self.blocks.get(block_id, []):
+            yield copy.deepcopy(block)
 
     async def get_self(self) -> dict[str, Any]:
         return copy.deepcopy(self._identity)
@@ -187,3 +217,22 @@ class InMemoryNotion:
         if data_source_id not in self.schemas:
             raise NotionNotShared("not shared", status=404, code="object_not_found")
         return copy.deepcopy(self.schemas[data_source_id])
+
+
+def _text(content: str) -> dict[str, Any]:
+    return {"type": "text", "text": {"content": content}, "plain_text": content}
+
+
+def _block(kind: str, content: str) -> dict[str, Any]:
+    body: dict[str, Any] = {"rich_text": [_text(content)]}
+    if kind == "to_do":
+        body["checked"] = False
+    return {"object": "block", "id": str(uuid.uuid4()), "type": kind, "has_children": False,
+            kind: body}  # fmt: skip
+
+
+def _title_of(page: dict[str, Any]) -> str:
+    for prop in page.get("properties", {}).values():
+        if prop.get("type") == "title":
+            return "".join(part.get("plain_text", "") for part in prop.get("title", []))
+    return ""

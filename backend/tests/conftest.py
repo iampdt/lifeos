@@ -87,7 +87,8 @@ async def session_factory(migrated_database):
             text(
                 "TRUNCATE action_executions, action_proposals, cron_runs, agent_runs, "
                 "audit_log, sessions, oauth_states, notion_connections, workspaces, ai_access, "
-                "ai_usage, account_settings, memory_facts, users "
+                "ai_usage, account_settings, memory_facts, knowledge_chunks, knowledge_pages, "
+                "users "
                 "RESTART IDENTITY CASCADE"
             )
         )

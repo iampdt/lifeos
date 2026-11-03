@@ -18,6 +18,8 @@ from app.db.models import (
     AgentRun,
     AuditLog,
     CronRun,
+    KnowledgeChunk,
+    KnowledgePage,
     MemoryFact,
     Session,
     User,
@@ -232,6 +234,12 @@ async def test_deleting_an_account_removes_everything_it_stored(env):
     noted = await env.post(env.other, "/api/v1/memory", {"text": "Mornings are for deep work"})
     assert noted.status_code == 201
     async with env.session_factory() as db, db.begin():
+        page = KnowledgePage(user_id=env.other_id, page_id="p" * 32, title="Notes",
+                             indexed_at=datetime.now(UTC), passages=1)  # fmt: skip
+        db.add(page)
+        await db.flush()
+        db.add(KnowledgeChunk(user_id=env.other_id, page_ref=page.id, position=0, text="Copy"))
+    async with env.session_factory() as db, db.begin():
         db.add(CronRun(user_id=env.other_id, job="morning_briefing", local_date=date(2026, 11, 1)))
     checkpointer = env.contexts.checkpointer
     for run_id in other_runs:
@@ -245,7 +253,8 @@ async def test_deleting_an_account_removes_everything_it_stored(env):
     assert (await env.other.get("/api/v1/auth/me")).status_code == 401
 
     async with env.session_factory() as db:
-        for model in (AgentRun, ActionProposal, CronRun, Session, MemoryFact):
+        for model in (AgentRun, ActionProposal, CronRun, Session, MemoryFact, KnowledgePage,
+                      KnowledgeChunk):  # fmt: skip
             left = await db.scalar(
                 select(func.count()).select_from(model).where(model.user_id == env.other_id)
             )

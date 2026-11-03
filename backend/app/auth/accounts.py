@@ -25,6 +25,7 @@ from app.db.models import (
     Workspace,
 )
 from app.execution.audit import audit
+from app.knowledge.index import clear_index
 
 
 async def account_for_google(
@@ -84,6 +85,7 @@ async def delete_account(db: AsyncSession, user_id: uuid.UUID) -> None:
     await db.execute(delete(AIUsage).where(AIUsage.user_id == user_id))
     await db.execute(delete(AccountSettings).where(AccountSettings.user_id == user_id))
     await db.execute(delete(MemoryFact).where(MemoryFact.user_id == user_id))
+    await clear_index(db, user_id)
     await db.execute(delete(User).where(User.id == user_id))
     audit(db, actor="user", event="account.deleted", user_id=None, entity_type="user",
           entity_id=str(user_id))  # fmt: skip

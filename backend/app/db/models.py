@@ -10,6 +10,7 @@ from sqlalchemy import (
     ARRAY,
     BigInteger,
     Boolean,
+    Computed,
     Date,
     DateTime,
     ForeignKey,
@@ -18,16 +19,40 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    cast,
     false,
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSON, JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSON, JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.types import UserDefinedType
 
 
 class Base(DeclarativeBase):
     pass
+
+
+class Vector(UserDefinedType):
+    """pgvector's `vector(n)`. Values are sent as text and cast in SQL, so asyncpg needs no
+    codec for the extension's type; LifeOS never reads vectors back, only compares them."""
+
+    cache_ok = True
+
+    def __init__(self, dimensions: int) -> None:
+        self.dimensions = dimensions
+
+    def get_col_spec(self, **kw: Any) -> str:
+        return f"vector({self.dimensions})"
+
+    def bind_processor(self, dialect: Any):
+        def process(value: list[float] | None) -> str | None:
+            return None if value is None else "[" + ",".join(f"{x:.7g}" for x in value) + "]"
+
+        return process
+
+    def bind_expression(self, bindvalue: Any):
+        return cast(cast(bindvalue, Text), self)
 
 
 class AgentRun(Base):
@@ -287,3 +312,47 @@ class MemoryFact(Base):
     source: Mapped[str] = mapped_column(String(10), default="you")  # you | chat
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class KnowledgePage(Base):
+    """A Notion page an account added to its knowledge index, and when it was last read."""
+
+    __tablename__ = "knowledge_pages"
+    __table_args__ = (UniqueConstraint("user_id", "page_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    page_id: Mapped[str] = mapped_column(String(64))
+    title: Mapped[str] = mapped_column(String(300))
+    url: Mapped[str] = mapped_column(String(500), default="")
+    notion_edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    indexed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    passages: Mapped[int] = mapped_column(Integer, default=0)
+    embedded: Mapped[bool] = mapped_column(Boolean, default=False)  # else keyword search only
+    truncated: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class KnowledgeChunk(Base):
+    """One passage of an indexed page: its text, a full-text vector, and an embedding when the
+    account's AI could compute one."""
+
+    __tablename__ = "knowledge_chunks"
+    __table_args__ = (
+        Index("ix_knowledge_chunks_user_id", "user_id"),
+        Index("ix_knowledge_chunks_tsv", "tsv", postgresql_using="gin"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    page_ref: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("knowledge_pages.id", ondelete="CASCADE")
+    )
+    position: Mapped[int] = mapped_column(Integer)
+    heading: Mapped[str] = mapped_column(String(600), default="")
+    text: Mapped[str] = mapped_column(Text)
+    tsv: Mapped[Any] = mapped_column(
+        TSVECTOR,
+        Computed("to_tsvector('english', heading || ' ' || text)", persisted=True),
+        deferred=True,
+    )
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(768), deferred=True)

@@ -6,8 +6,9 @@ Free-form text never drives an action.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pydantic import BaseModel
 
@@ -71,6 +72,21 @@ class LLMResult[T: BaseModel]:
     usage: LLMUsage
 
 
+EMBEDDING_DIMENSIONS = 768
+EmbeddingTask = Literal["document", "query"]
+
+
+def normalise(vector: list[float]) -> list[float]:
+    length = math.sqrt(sum(x * x for x in vector))
+    return [x / length for x in vector] if length else vector
+
+
+@dataclass(frozen=True)
+class Embeddings:
+    vectors: list[list[float]]  # unit length, EMBEDDING_DIMENSIONS each, in input order
+    usage: LLMUsage
+
+
 class LLMProvider(Protocol):
     name: str
 
@@ -84,3 +100,9 @@ class LLMProvider(Protocol):
         temperature: float,
         timeout_seconds: float,
     ) -> Completion[T]: ...
+
+    async def embed(
+        self, *, model: str, texts: list[str], task: EmbeddingTask, timeout_seconds: float
+    ) -> list[list[float]]:
+        """One unit-length vector of EMBEDDING_DIMENSIONS per text, in order."""
+        ...

@@ -60,7 +60,7 @@ OUT_OF_STEPS = "I ran out of steps for this question. Try asking it more narrowl
 ToolName = Literal[
     "get_today", "get_overdue", "get_next_7_days", "get_inbox", "get_week_summary",
     "get_goals", "get_reading", "propose_mark_done", "propose_reschedule",
-    "propose_set_status", "propose_create_task", "suggest_memory",
+    "propose_set_status", "propose_create_task", "suggest_memory", "search_knowledge",
 ]  # fmt: skip
 
 
@@ -74,6 +74,7 @@ class ChatStep(BaseModel):
     )
     status: Literal["next", "doing", "waiting", "cancelled"] | None = None
     note: str | None = Field(default=None, description="For suggest_memory: one short sentence")
+    query: str | None = Field(default=None, description="For search_knowledge: what to look up")
     answer: str | None = Field(default=None, description="Your reply to the owner; plain text")
 
 
@@ -89,6 +90,8 @@ Tools:
 - get_week_summary: this week's planned and done counts and the habit scorecard
 - get_goals: active goals with progress
 - get_reading: books being read
+- search_knowledge(query): passages from Notion pages the owner added to their knowledge index
+  (notes, plans, documents)
 - propose_mark_done(ref): propose marking a task Done today
 - propose_reschedule(ref, date): propose a new Due date
 - propose_set_status(ref, status): propose Next, Doing, Waiting or Cancelled
@@ -104,7 +107,8 @@ Rules:
   remember, in their own words.
 - A day holds a limited number of major tasks (see LIMITS). If a proposal is refused,
   explain the reason.
-- Answer briefly in plain text and name tasks by title, never by reference code.
+- Answer briefly in plain text and name tasks by title, never by reference code. When an
+  answer uses search_knowledge, say which page it comes from.
 {DATA_RULES}
 {MEMORY_RULES}"""
 
@@ -117,6 +121,8 @@ class _Turn:
         self.refs = RefMap("T")
         self.tasks: dict[str, Task] = {}
         self._active: list[Task] | None = None
+        self.pages: dict[str, str] = {}  # knowledge reference (K1) → page title
+        self.sources: dict[str, dict[str, str]] = {}  # page title → {title, url}
 
     async def active(self) -> list[Task]:
         if self._active is None:
@@ -137,7 +143,8 @@ class _Turn:
         return self.tasks[page_id]
 
     def titles(self) -> dict[str, str]:
-        return {ref: clean(self.tasks[pid].title, 80) for ref, pid in self.refs.ids.items()}
+        tasks = {ref: clean(self.tasks[pid].title, 80) for ref, pid in self.refs.ids.items()}
+        return {**tasks, **self.pages}
 
 
 class _Refused(Exception):
@@ -185,6 +192,10 @@ class ChatAgent:
                 if step.action == "answer" or step.tool is None:
                     text = clean(replace_refs(step.answer or "", turn.titles()), 2000)
                     yield {"type": "answer", "text": text or "(no answer)"}
+                    # Link the indexed pages the answer names; search also returns near misses.
+                    named = [s for t, s in turn.sources.items() if t.casefold() in text.casefold()]
+                    if named:
+                        yield {"type": "sources", "sources": named}
                     answered = True
                     break
                 yield {"type": "tool", "name": step.tool}
@@ -193,6 +204,8 @@ class ChatAgent:
                         note = self._note(step, notes)
                         yield {"type": "memory_suggestion", "text": note}
                         output, cards = "Suggested; it's saved only if the owner confirms.", []
+                    elif step.tool == "search_knowledge":
+                        output, cards = await self._knowledge(turn, step), []
                     else:
                         output, cards = await self._tool(turn, step, run_id)
                 except _Refused as exc:
@@ -205,7 +218,8 @@ class ChatAgent:
                     f"{k}={v}" for k, v in
                     (("ref", step.ref), ("date", step.date), ("status", step.status),
                      ("title", clean(step.title, 60) if step.title else None),
-                     ("note", clean(step.note, 60) if step.note else None)) if v
+                     ("note", clean(step.note, 60) if step.note else None),
+                     ("query", clean(step.query, 60) if step.query else None)) if v
                 )  # fmt: skip
                 results.append(f"{len(results) + 1}. {step.tool}({args}) →\n{output}")
             if not answered and status == "completed":
@@ -361,6 +375,23 @@ class ChatAgent:
         cards = await proposal_cards(deps, [str(i) for i in ids], {})
         summary = "; ".join(f"{c['kind']} for {c['target']['title']!r}" for c in cards)
         return f"Proposed (pending the owner's approval): {summary}", cards
+
+    async def _knowledge(self, turn: _Turn, step: ChatStep) -> str:
+        query = clean(step.query, 300)
+        if not query:
+            raise _Refused("a query is required")
+        hits, _ = await self.deps.knowledge().search(query, limit=5)
+        if not hits:
+            return "No indexed page matches. The owner adds pages on the Knowledge page."
+        lines = []
+        for hit in hits:
+            ref = f"K{len(turn.pages) + 1}"
+            title = clean(hit.page.title, 80)
+            turn.pages[ref] = title
+            turn.sources.setdefault(title, {"title": hit.page.title, "url": hit.page.url})
+            where = f" › {clean(hit.heading, 120)}" if hit.heading else ""
+            lines.append(f'{ref} | "{clean(hit.page.title)}"{where}\n{clean(hit.text, 700)}')
+        return data_block("KNOWLEDGE:\n" + "\n\n".join(lines))
 
     @staticmethod
     def _note(step: ChatStep, notes: Sequence[str]) -> str:

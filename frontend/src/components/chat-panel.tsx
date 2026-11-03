@@ -16,7 +16,8 @@ type Message =
   | { role: "user" | "assistant"; content: string }
   | { role: "activity"; content: string }
   | { role: "proposal"; card: ProposalCard }
-  | { role: "memory"; text: string };
+  | { role: "memory"; text: string }
+  | { role: "sources"; sources: { title: string; url: string }[] };
 
 const TOOL_LABELS: Record<string, string> = {
   get_today: "Checking today's tasks",
@@ -31,6 +32,7 @@ const TOOL_LABELS: Record<string, string> = {
   propose_set_status: "Preparing a change",
   propose_create_task: "Preparing a change",
   suggest_memory: "Suggesting a note to remember",
+  search_knowledge: "Searching your pages",
 };
 
 export function ChatPanel() {
@@ -63,6 +65,8 @@ export function ChatPanel() {
         } else if (event.type === "proposal") {
           setMessages((m) => [...m, { role: "proposal", card: event.proposal as ProposalCard }]);
           client.invalidateQueries({ queryKey: ["approvals"] });
+        } else if (event.type === "sources") {
+          setMessages((m) => [...m, { role: "sources", sources: event.sources as { title: string; url: string }[] }]);
         } else if (event.type === "memory_suggestion") {
           setMessages((m) => [...m, { role: "memory", text: String(event.text) }]);
         } else if (event.type === "answer") {
@@ -101,6 +105,18 @@ export function ChatPanel() {
               <ProposalCardView key={i} card={m.card} />
             ) : m.role === "memory" ? (
               <MemorySuggestion key={i} text={m.text} />
+            ) : m.role === "sources" ? (
+              <p key={i} className="text-xs text-muted-foreground">
+                From{" "}
+                {m.sources.map((s, j) => (
+                  <span key={s.title}>
+                    {j > 0 && ", "}
+                    {s.url ? (
+                      <a href={s.url} target="_blank" rel="noreferrer" className="underline underline-offset-2">{s.title}</a>
+                    ) : s.title}
+                  </span>
+                ))}
+              </p>
             ) : m.role === "activity" ? (
               <p key={i} className="text-xs text-muted-foreground">{m.content}…</p>
             ) : (

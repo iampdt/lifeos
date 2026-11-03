@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.crypto import TokenCipher
 from app.db.models import NotionConnection
 from app.execution.audit import audit
+from app.knowledge.index import clear_index
 from app.notion.client import DEFAULT_BASE_URL, DEFAULT_VERSION, NotionClient
 from app.notion.errors import NotionUnauthorized, NotionUnavailable
 from app.notion.oauth import NotionOAuth, NotionOAuthError, TokenGrant
@@ -111,8 +112,8 @@ class NotionConnections:
                            "template": grant.duplicated_template_id is not None})  # fmt: skip
 
     async def disconnect(self, user_id: uuid.UUID) -> tuple[bool, bool]:
-        """Revoke the token at Notion (best effort) and delete it here.
-        Returns (was connected, revoked at Notion)."""
+        """Revoke the token at Notion (best effort) and delete it here, with the account's
+        knowledge index. Returns (was connected, revoked at Notion)."""
         connection = await self.get(user_id)
         if connection is None:
             return False, False
@@ -124,6 +125,7 @@ class NotionConnections:
             logger.warning("revoking a Notion token failed: %s", exc)
         async with self.session_factory() as db, db.begin():
             await db.execute(delete(NotionConnection).where(NotionConnection.user_id == user_id))
+            await clear_index(db, user_id)  # copies of the workspace's pages go with it
             audit(db, actor="user", event="notion.disconnected", user_id=user_id,
                   details={"revoked": revoked})  # fmt: skip
         self._limiters.pop(user_id, None)

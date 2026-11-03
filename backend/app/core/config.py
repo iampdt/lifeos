@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     llm_smart_models: str = "gemini-3.5-flash,gemini-3.5-flash-lite"
     llm_timeout_seconds: float = 30.0
     llm_daily_token_budget: int = 300_000  # the service key, all accounts together
+    # The knowledge index's embeddings (architecture §5.9). Changing either means re-indexing.
+    llm_embedding_model: str = "gemini-embedding-001"
     # Each account's daily allowance on the service key (the owner isn't limited by it).
     llm_user_daily_tokens: int = 40_000
 

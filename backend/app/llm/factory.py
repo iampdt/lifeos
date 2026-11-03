@@ -19,6 +19,7 @@ def build_router(settings: Settings) -> LLMRouter:
         {"fast": settings.model_chain("fast"), "smart": settings.model_chain("smart")},
         timeout_seconds=settings.llm_timeout_seconds,
         daily_token_budget=settings.llm_daily_token_budget,
+        embedding_model=settings.llm_embedding_model,
     )
 
 
@@ -28,6 +29,7 @@ def own_key_router(settings: Settings, api_key: str) -> LLMRouter:
         {"fast": settings.model_chain("fast"), "smart": settings.model_chain("smart")},
         timeout_seconds=settings.llm_timeout_seconds,
         daily_token_budget=UNLIMITED,
+        embedding_model=settings.llm_embedding_model,
     )
 
 

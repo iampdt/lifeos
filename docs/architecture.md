@@ -193,7 +193,7 @@ without a scorecard.
 
 A loop of structured steps: each model call returns one tool call or the final answer, with at
 most 6 steps and 90 s per turn. Read tools: today, overdue, next 7 days, Inbox, week summary,
-goals, reading. Propose tools (mark done, reschedule, set status, create task) only create
+goals, reading, and the knowledge index (§5.9). Propose tools (mark done, reschedule, set status, create task) only create
 pending proposals, and code checks every argument and R1 first. `suggest_memory` offers a note
 to remember (§5.8), which the account saves from the chat panel or ignores. Answers stream to the
 browser as server-sent events.
@@ -241,6 +241,34 @@ stripped of angle brackets like Notion data, and the system prompt says they tai
 wording but never change rules, limits or approvals. The check-in parser doesn't see them. The
 audit log records that a note was added, edited or deleted, never its text. The shared demo's
 notes are fixed.
+
+### 5.9 Knowledge index
+
+An account chooses up to 25 Notion pages (notes, plans, documents) to ask questions of
+(`knowledge/`). Adding a page reads its blocks in order, nested ones three levels deep, and
+groups the text under its headings into passages of about 1,200 characters, each keeping its
+heading path. Child pages and databases are separate pages, indexed separately if wanted.
+
+Each passage gets a Postgres full-text vector, always, and a 768-dimension embedding from
+`gemini-embedding-001` (pgvector) when the account's AI can compute one. The embedding model is
+one model, not a chain: vectors from different models can't be compared. Without embeddings a
+page is searchable by its words, and refreshing it later adds them.
+
+Search ranks passages twice, by words (`ts_rank_cd`, any of the question's words) and by
+meaning (cosine distance), and fuses the rankings with reciprocal rank fusion, so an exact term
+and a paraphrase both find their passage. The distance is exact, over the account's own rows:
+a few thousand passages need no approximate index.
+
+The knowledge specialist answers from the top six passages only, citing them as `[S1]`; code
+keeps only references it was shown, renumbers them `[1]`, `[2]` in order and returns each cited
+passage with its page and link. Without a model, the passages are the answer. Chat's
+`search_knowledge` tool gives the model the same passages, and the chat panel links the pages
+its answer names. Asking is recorded as a `knowledge` run for usage reports; the question and
+answer aren't stored.
+
+A page is read again only when the account refreshes it, and rebuilt only if Notion's
+`last_edited_time` changed. Disconnecting Notion or deleting the account deletes the index; the
+demo's three sample documents are rebuilt with the demo.
 
 ## 6. Actions, approvals and permissions
 
@@ -328,6 +356,7 @@ account (`user_id`), and every query filters on it.
 | `ai_access`, `ai_usage` | An account's agreement to the free-tier terms (with the disclosure version) and its own Gemini key (encrypted); tokens used per UTC day on the service key and on its own |
 | `workspaces` | An account's own mapping (module → data source and properties) and rule settings: timezone, major tasks a day, review day and time |
 | `memory_facts` | An account's notes to remember: text, source (`you` or `chat`), created and updated times |
+| `knowledge_pages`, `knowledge_chunks` | Indexed Notion pages (title, link, Notion's last edit, when indexed, whether embedded or cut short) and their passages: heading path, text, a generated `tsvector`, a `vector(768)` embedding |
 | `notion_connections` | An account's Notion workspace connection: workspace, bot, access and refresh tokens (encrypted), status (`active` or `needs_reconnect`) |
 | `cron_runs` | One row per (account, job, local date): scheduled routines and the daily drift check |
 | `checkpoint*` | LangGraph checkpoints, created and migrated by the checkpointer itself |
@@ -386,6 +415,7 @@ Productivity records stay in Notion. Postgres holds only state LifeOS owns. Migr
 | `/` Command Center | Today's tasks and major-task count, evening check-in and morning briefing, recent runs, streaming chat, approvals drawer |
 | `/tasks` | Today, overdue, next 7 days, Inbox and all open tasks, with a filter; each links to its Notion page |
 | `/goals` | Goals with progress, success metric, deadline and their open tasks; the reading queue with pages read |
+| `/knowledge` | Ask the indexed pages, with numbered citations; add pages by title, refresh or remove them |
 | `/history` | Each day's morning briefing (priorities, observations) beside its evening check-in (finished, left over, scorecard, the next day's plan) |
 | `/weekly` Reviews | Weekly review: metrics, draft review, decisions, Inbox triage, the owner's note, approval; the monthly review |
 | `/settings` | Write switch, timezone, permission modes, model chains and tokens used, Notion connection and drift, account |
@@ -444,7 +474,6 @@ a Notion account:
 
 ## 14. Planned
 
-- **Knowledge index:** selected Notion pages indexed (pgvector) for answers with citations.
 - **Goal and learning specialists**, and an optional `goal.set_current` action.
 - **Quality bar:** more evaluation suites (weekly and monthly review, chat tool use).
 - **Multi-user:** sign-up, Notion OAuth per user, per-user data, onboarding from a Notion

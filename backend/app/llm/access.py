@@ -27,7 +27,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.crypto import TokenCipher
 from app.db.models import AIAccess, AIUsage
 from app.execution.audit import audit
-from app.llm.base import LLMKeyRejected, LLMOff, LLMResult, LLMUnavailable
+from app.llm.base import (
+    Embeddings,
+    EmbeddingTask,
+    LLMKeyRejected,
+    LLMOff,
+    LLMResult,
+    LLMUnavailable,
+)
 from app.llm.router import LLMRouter
 
 DISCLOSURE_VERSION = "2026-11-03"
@@ -224,6 +231,25 @@ class AccountLLM:
         service = await self.access.service_route(self.user_id)
         result = await service.generate(schema, **kwargs)
         await self._record(result, own=False)
+        return result
+
+    async def embed(self, texts: list[str], *, task: EmbeddingTask) -> Embeddings:
+        """Like `generate`: the account's own key first, then the allowance. A vector from
+        either key comes from the same model, so they can be compared."""
+        own = await self.access.own_router(self.user_id)
+        if own is not None:
+            try:
+                result = await own.embed(texts, task=task)
+            except LLMKeyRejected:
+                await self.access.key_rejected(self.user_id)
+            except LLMUnavailable:
+                pass
+            else:
+                await self.access.record(self.user_id, own=True, tokens=result.usage.input_tokens)
+                return result
+        service = await self.access.service_route(self.user_id)
+        result = await service.embed(texts, task=task)
+        await self.access.record(self.user_id, own=False, tokens=result.usage.input_tokens)
         return result
 
     async def _record(self, result: LLMResult, *, own: bool) -> None:

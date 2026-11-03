@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.execution.actions import ActionKind
 from app.execution.executor import Executor
 from app.execution.proposals import ProposalService
+from app.knowledge.index import KnowledgeIndex
 from app.llm.router import LLMRouter
 from app.notion.mapping import DataSourceSpec
 from app.notion.workspace import NotionWorkspace, build_workspace
@@ -90,6 +91,12 @@ class WorkflowDeps:
 
     def mode(self, kind: ActionKind) -> Mode:
         return self.modes.get(kind, Mode.APPROVE)
+
+    def knowledge(self) -> KnowledgeIndex:
+        """The account's knowledge index, read through its own Notion connection and AI."""
+        return KnowledgeIndex(
+            self.session_factory, self.notion, self.llm, self.user_id, clock=self.clock
+        )
 
     async def memory(self) -> list[str]:
         """The account's saved notes, read when a prompt is built so edits apply at once."""

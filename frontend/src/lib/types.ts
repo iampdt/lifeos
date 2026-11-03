@@ -328,3 +328,30 @@ export type MemoryView = {
   limits: { notes: number; chars: number };
   editable: boolean;
 };
+
+export type KnowledgePageView = {
+  id: string;
+  page_id: string;
+  title: string;
+  url: string;
+  passages: number;
+  embedded: boolean;
+  truncated: boolean;
+  indexed_at: string;
+  notion_edited_at: string | null;
+};
+
+export type KnowledgeView = { pages: KnowledgePageView[]; limits: { pages: number }; editable: boolean };
+
+export type PageSearchResult = { page_id: string; title: string; url: string; edited_at: string | null; indexed: boolean };
+
+export type Citation = { n: number; page_id: string; title: string; url: string; heading: string; excerpt: string };
+
+export type KnowledgeAnswer = {
+  answer: string | null;
+  found: boolean | null;
+  source: "ai" | "search";
+  search: "hybrid" | "keyword";
+  citations: Citation[];
+  warnings: string[];
+};

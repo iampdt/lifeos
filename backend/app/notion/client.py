@@ -210,6 +210,28 @@ class NotionClient:
                 return
             body = {**body, "start_cursor": cursor}
 
+    async def search_pages(self, query: str, *, page_size: int = 20) -> list[dict[str, Any]]:
+        """Pages (not databases) the integration can see whose title matches, best first; one
+        page of results is enough for a picker."""
+        body = {"query": query, "filter": {"property": "object", "value": "page"},
+                "page_size": page_size}  # fmt: skip
+        data = await self._request("POST", "search", json=body)
+        return list(data.get("results", []))
+
+    async def list_block_children(self, block_id: str) -> AsyncIterator[dict[str, Any]]:
+        """A page's (or block's) direct children, in order, following `next_cursor`."""
+        cursor: str | None = None
+        while True:
+            path = f"blocks/{block_id}/children?page_size=100"
+            if cursor:
+                path += f"&start_cursor={cursor}"
+            data = await self._request("GET", path)
+            for item in data.get("results", []):
+                yield item
+            cursor = data.get("next_cursor")
+            if not data.get("has_more") or not cursor:
+                return
+
     async def get_database(self, database_id: str) -> dict[str, Any]:
         return await self._request("GET", f"databases/{database_id}")
 

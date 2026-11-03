@@ -10,12 +10,18 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 import pytest
 from cryptography.fernet import Fernet
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api.main import create_app
 from app.core.config import Settings
 from app.core.crypto import TokenCipher
-from app.db.models import AuditLog, NotionConnection, OAuthState
+from app.db.models import (
+    AuditLog,
+    KnowledgeChunk,
+    KnowledgePage,
+    NotionConnection,
+    OAuthState,
+)
 from app.llm.mock import MockLLM
 from app.notion.connections import NotionConnections
 from app.notion.oauth import NotionOAuth
@@ -340,9 +346,19 @@ async def test_tokens_with_an_expiry_are_refreshed_ahead_of_time(session_factory
 
 async def test_disconnecting_revokes_and_forgets_the_tokens(env):
     await env.connect()
+    user_id = (await env.row()).user_id
+    async with env.session_factory() as db, db.begin():
+        page = KnowledgePage(user_id=user_id, page_id="p" * 32, title="Notes",
+                             indexed_at=datetime.now(UTC), passages=1)  # fmt: skip
+        db.add(page)
+        await db.flush()
+        db.add(KnowledgeChunk(user_id=user_id, page_ref=page.id, position=0, text="Copied text"))
     response = await env.post(env.client, "/api/v1/notion/disconnect")
     assert response.json() == {"status": "disconnected", "revoked": True}
     assert env.fake.revoked == ["access-1"] and await env.row() is None
+    async with env.session_factory() as db:  # copies of the workspace's pages go too
+        assert await db.scalar(select(func.count()).select_from(KnowledgeChunk)) == 0
+        assert await db.scalar(select(func.count()).select_from(KnowledgePage)) == 0
     again = await env.post(env.client, "/api/v1/notion/disconnect")
     assert again.status_code == 409 and again.json()["error"]["code"] == "not_connected"
 

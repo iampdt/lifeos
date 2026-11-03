@@ -22,6 +22,8 @@ GitHub Actions ── signed POST /api/v1/internal/cron/{job} ──► Render
 2. Copy the **direct** connection string (not the `-pooler` one), for example
    `postgresql://user:password@ep-….aws.neon.tech/neondb?sslmode=require&channel_binding=require`.
    LifeOS accepts it as is and derives the driver-specific forms itself.
+3. Nothing to install: the first migration that needs pgvector runs `CREATE EXTENSION IF NOT
+   EXISTS vector`, which Neon allows.
 
 ### 2. API (Render)
 
