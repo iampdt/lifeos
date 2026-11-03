@@ -71,7 +71,7 @@ export default function SettingsPage() {
                       <span className="ml-2 text-xs text-muted-foreground">LIFEOS_WRITES_ENABLED</span>
                     </Row>
                     <Row label="Timezone">{s.timezone}</Row>
-                    <ModesEditor modes={s.modes} readOnly={s.demo} />
+                    <ModesEditor modes={s.modes} autoKinds={s.auto_kinds} readOnly={s.demo} />
                   </>
                 )}
               </CardContent>

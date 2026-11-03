@@ -12,10 +12,20 @@ const MODES: Record<string, string> = {
   suggest: "Suggest only",
   off: "Off",
 };
+const AUTO = "Automatic (undoable)";
 
 /** How LifeOS handles each kind of change: proposed for approval (the default), shown as a
- * suggestion that is never written, or not proposed at all. Read-only in the demo. */
-export function ModesEditor({ modes, readOnly }: { modes: Record<string, string>; readOnly: boolean }) {
+ * suggestion that is never written, not proposed at all, or, for a few kinds, applied
+ * automatically. Read-only in the demo. */
+export function ModesEditor({
+  modes,
+  autoKinds = [],
+  readOnly,
+}: {
+  modes: Record<string, string>;
+  autoKinds?: string[];
+  readOnly: boolean;
+}) {
   const client = useQueryClient();
   const save = useMutation({
     mutationFn: (change: Record<string, string>) =>
@@ -33,13 +43,16 @@ export function ModesEditor({ modes, readOnly }: { modes: Record<string, string>
             <select aria-label={`Mode for ${KIND_LABELS[kind] ?? kind}`} className={nativeSelect} value={mode}
               disabled={readOnly || save.isPending} onChange={(e) => save.mutate({ [kind]: e.target.value })}>
               {Object.entries(MODES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              {!MODES[mode] && <option value={mode}>{mode}</option>}
+              {autoKinds.includes(kind) && <option value="auto">{AUTO}</option>}
+              {!MODES[mode] && mode !== "auto" && <option value={mode}>{mode}</option>}
             </select>
           </label>
         ))}
       </div>
       <p className="text-xs text-muted-foreground">
         Suggestions appear with the others but are never written to Notion; anything off isn&apos;t proposed.
+        Automatic applies the change at once (only reading progress, goal progress and the scorecard can); undo it
+        from Approvals.
       </p>
     </div>
   );

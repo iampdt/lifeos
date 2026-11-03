@@ -39,6 +39,16 @@ export function ApprovalsSheet() {
     onError: (error) => toast.error(error.message),
   });
 
+  const undo = useMutation({
+    mutationFn: (id: string) => api<{ outcome: string; writes_enabled: boolean }>(`/proposals/${id}/undo`, { method: "POST" }),
+    onSuccess: (result) => {
+      client.invalidateQueries({ queryKey: ["approvals"] });
+      toast.success(result.writes_enabled ? "Undone in Notion." : "Nothing to undo: writes are off.");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const automatic = approvals.data?.automatic ?? [];
+
   return (
     <>
       <Sheet>
@@ -79,6 +89,32 @@ export function ApprovalsSheet() {
                         onClick={() => decide.mutate({ id: card.id, approve: false })}>Reject</Button>
                       <Button size="sm" disabled={decide.isPending}
                         onClick={() => decide.mutate({ id: card.id, approve: true })}>Approve</Button>
+                    </div>
+                  </div>
+                ))}
+              </section>
+            )}
+            {automatic.length > 0 && (
+              <section className="flex flex-col gap-2">
+                <h3 className="text-sm font-medium">Applied automatically</h3>
+                <p className="text-xs text-muted-foreground">
+                  The kinds you set to Automatic in Settings, from the last week. Undo puts back the values from before,
+                  unless the page changed since.
+                </p>
+                {automatic.map((card) => (
+                  <div key={card.id} className="flex flex-col gap-2">
+                    <ProposalCardView card={card} />
+                    <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
+                      {card.decided_at && <span className="mr-auto">{formatTime(card.decided_at)}</span>}
+                      {card.status === "undone" ? (
+                        <Badge variant="outline">Undone</Badge>
+                      ) : card.undoable ? (
+                        <Button size="sm" variant="outline" disabled={undo.isPending} onClick={() => undo.mutate(card.id)}>
+                          Undo
+                        </Button>
+                      ) : (
+                        <Badge variant="outline">{card.status === "executed" ? "Already as it was" : card.status}</Badge>
+                      )}
                     </div>
                   </div>
                 ))}

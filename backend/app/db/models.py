@@ -111,6 +111,11 @@ class ActionProposal(Base):
     result_page_id: Mapped[str | None] = mapped_column(String(64))
     # Title of the target (or of the page to create), so approval screens can name it.
     target_title: Mapped[str | None] = mapped_column(String(200))
+    # Automatic mode (architecture §6.3): approved by LifeOS itself, and what to write back to
+    # undo it (the fields' values just before the write).
+    auto_applied: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    restore: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    undone_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     @property
     def effective_payload(self) -> dict[str, Any]:

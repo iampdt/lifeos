@@ -18,7 +18,9 @@ from sqlalchemy import select
 
 from app.db.models import ActionProposal
 from app.domain.models import Task
+from app.execution.actions import ActionKind
 from app.execution.proposals import ProposalError
+from app.permissions.policy import AUTO_ALLOWED, Mode
 from app.workflows.deps import WorkflowDeps
 
 
@@ -33,6 +35,7 @@ class BaseState(TypedDict, total=False):
     summary: dict[str, Any]
     warnings: Annotated[list[str], operator.add]
     llm: Annotated[list[dict[str, Any]], operator.add]
+    auto_applied: list[str]  # proposals approved and executed without asking (auto mode)
 
 
 def dump_tasks(tasks: Sequence[Task]) -> list[dict[str, Any]]:
@@ -95,6 +98,9 @@ async def proposal_cards(
                 "rule_ids": list(row.rule_ids or []),
                 "depends_on": [str(d) for d in row.depends_on or []],
                 "expires_at": row.expires_at.isoformat(),
+                "auto_applied": row.auto_applied,
+                "undoable": row.status == "executed" and row.restore is not None,
+                "decided_at": row.decided_at.isoformat() if row.decided_at else None,
                 **(_scorecard_labels(deps) if row.kind == "habit.upsert_day" else {}),
             }
         )
@@ -170,7 +176,27 @@ def approval_request(workflow: str, cards: list[dict[str, Any]], writes_enabled:
 def add_approval_flow(
     graph: StateGraph, deps: WorkflowDeps, workflow: str, *, after: str, then: str
 ) -> None:
-    """after → (approve → execute →) then. Skips approval when nothing was proposed."""
+    """after → auto → (approve → execute →) then. Kinds the account runs automatically are
+    approved and executed first; approval is skipped when nothing else was proposed."""
+
+    async def auto(state: BaseState) -> dict[str, Any]:
+        ids = state.get("proposal_ids") or []
+        chosen = [i for i in ids if await _runs_automatically(deps, i)]
+        if not chosen:
+            return {}
+        async with deps.session_factory() as session, session.begin():
+            service = deps.proposals(session)
+            for proposal_id in chosen:
+                row = await service.approve(
+                    uuid.UUID(proposal_id), note="automatic mode", actor="auto"
+                )
+                row.auto_applied = True
+        results = await deps.executor("auto").execute_approved([uuid.UUID(i) for i in chosen])
+        return {
+            "proposal_ids": [i for i in ids if i not in chosen],
+            "auto_applied": chosen,
+            "results": [_result(r) for r in results],
+        }
 
     async def approve(state: BaseState) -> dict[str, Any]:
         ids = state.get("proposal_ids") or []
@@ -180,27 +206,20 @@ def add_approval_flow(
 
     async def execute(state: BaseState) -> dict[str, Any]:
         approved = (state.get("decisions") or {}).get("approved") or []
+        earlier = state.get("results") or []  # from the automatic step
         if not approved:
-            return {"results": []}
+            return {"results": earlier}
         results = await deps.executor(f"agent:{workflow}").execute_approved(
             [uuid.UUID(i) for i in approved]
         )
-        return {
-            "results": [
-                {
-                    "proposal_id": str(r.proposal_id),
-                    "outcome": r.outcome,
-                    "page_id": r.page_id,
-                    "detail": r.detail,
-                }
-                for r in results
-            ]  # fmt: skip
-        }
+        return {"results": earlier + [_result(r) for r in results]}
 
+    graph.add_node("auto", auto)
     graph.add_node("approve", approve)
     graph.add_node("execute", execute)
+    graph.add_edge(after, "auto")
     graph.add_conditional_edges(
-        after, lambda s: "approve" if s.get("proposal_ids") else then, ["approve", then]
+        "auto", lambda s: "approve" if s.get("proposal_ids") else then, ["approve", then]
     )
     graph.add_edge("approve", "execute")
     graph.add_edge("execute", then)
@@ -214,8 +233,33 @@ def outcome_counts(results: Sequence[dict[str, Any]]) -> dict[str, int]:
 
 
 def execution_note(state: BaseState, writes_enabled: bool) -> str | None:
-    if not (state.get("decisions") or {}).get("approved"):
+    auto = state.get("auto_applied") or []
+    if not (state.get("decisions") or {}).get("approved") and not auto:
         return None
     if not writes_enabled:
         return "Writes are disabled (LIFEOS_WRITES_ENABLED=false): nothing was changed in Notion."
+    if auto:
+        changes = "change was" if len(auto) == 1 else "changes were"
+        return (
+            f"{len(auto)} {changes} applied automatically, as chosen in Settings; you can undo "
+            "them from Approvals."
+        )
     return None
+
+
+async def _runs_automatically(deps: WorkflowDeps, proposal_id: str) -> bool:
+    async with deps.session_factory() as session:
+        row = await session.get(ActionProposal, uuid.UUID(proposal_id))
+    if row is None or row.status != "pending" or row.depends_on:
+        return False
+    kind = ActionKind(row.kind)
+    return kind in AUTO_ALLOWED and deps.mode(kind) == Mode.AUTO
+
+
+def _result(result: Any) -> dict[str, Any]:
+    return {
+        "proposal_id": str(result.proposal_id),
+        "outcome": result.outcome,
+        "page_id": result.page_id,
+        "detail": result.detail,
+    }

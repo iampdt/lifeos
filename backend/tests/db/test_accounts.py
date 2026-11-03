@@ -135,7 +135,8 @@ async def test_runs_of_another_account_are_invisible_and_cant_be_resumed(env):
     )
     assert hijack.status_code == 409
     assert (await env.owner.get(f"/api/v1/runs/{run['id']}")).json()["status"] == "waiting_approval"
-    assert (await other.get("/api/v1/approvals")).json() == {"runs": [], "standalone": []}
+    nothing = {"runs": [], "standalone": [], "automatic": []}
+    assert (await other.get("/api/v1/approvals")).json() == nothing
     assert len((await env.owner.get("/api/v1/approvals")).json()["runs"]) == 1
 
 

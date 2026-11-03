@@ -324,7 +324,13 @@ field values.
   - `off`: never proposed. The run says so in its warnings. A new due date whose weekly or
     monthly page doesn't exist yet, with creating that page `off`, is proposed without the link.
     Chat refuses a request that needs an `off` kind.
-  - `auto` (reserved): not offered.
+  - `auto`: applied as soon as it is proposed, with no approval step. Offered only for kinds
+    that record numbers the owner reported: `book.update_progress`, `goal.set_current` and
+    `habit.upsert_day` (`AUTO_ALLOWED`). The executor keeps the fields' values from just
+    before the write; for a week, Approvals lists the change with **Undo**, which writes them
+    back unless the page changed since (then the owner's edit stands). A scorecard row the
+    change created is cleared, not deleted. Proposals that depend on another never run
+    automatically.
 - The **kill switch** `LIFEOS_WRITES_ENABLED=false` blocks every write regardless of approval.
 
 ### 6.4 Idempotency
@@ -358,7 +364,7 @@ account (`user_id`), and every query filters on it.
 | Table | Contents |
 | --- | --- |
 | `agent_runs` | One row per workflow or chat run: status, waiting request or summary, provider, model, tokens, latency, error |
-| `action_proposals` | Kind, payload, edited payload, before-snapshot, reason, rule IDs, status, dependencies, idempotency key, expiry, target title, result page |
+| `action_proposals` | Kind, payload, edited payload, before-snapshot, reason, rule IDs, status, dependencies, idempotency key, expiry, target title, result page; for automatic changes, the values that undo them and when they were undone |
 | `action_executions` | One row per execution attempt and its outcome |
 | `audit_log` | Append-only (a trigger rejects `UPDATE` and `DELETE`, except through `purge_user_audit` when an account is deleted): account, actor, event, entity, details. IDs and kinds only, no page contents |
 | `users`, `sessions` | Accounts (Google subject ID or password hash; at most one `is_owner`); sessions store a SHA-256 of the cookie token and a CSRF token |

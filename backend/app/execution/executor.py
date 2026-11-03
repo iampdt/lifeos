@@ -8,6 +8,9 @@ For each approved proposal, in dependency order:
   4. write, then re-read and compare → `verified` or `mismatch`
   5. record the attempt and append to the audit log
 
+Kinds that can run automatically also keep the fields' values from just before the write, so
+`undo` can put them back (refused if the page changed since).
+
 Notion I/O happens outside database transactions, so a slow API call never holds a row lock.
 """
 
@@ -17,7 +20,7 @@ import logging
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
@@ -42,7 +45,7 @@ from app.notion.errors import NotionError
 from app.notion.mapping import DataSourceSpec
 from app.notion.queries import QuerySpec
 from app.notion.repositories import HabitRepository, PeriodRepository, TaskRepository
-from app.permissions.policy import PermissionDenied, check_plan
+from app.permissions.policy import AUTO_ALLOWED, PermissionDenied, check_plan
 from app.services.calendar import DEFAULT_TZ
 
 logger = logging.getLogger("lifeos.executor")
@@ -181,12 +184,13 @@ class Executor:
 
         page_id: str | None = None
         error: dict[str, Any] | None = None
+        prior: dict[str, Any] | None = None
         try:
             if blocker:
                 raise _DependencyFailed(blocker)
             plan = build_plan(kind, parse_payload(kind, payload_data), self.specs, resolved)
             check_plan(plan, self.specs[plan.data_source])
-            page_id, outcome, detail = await self._apply(plan, snapshot)
+            page_id, outcome, detail, prior = await self._apply(plan, snapshot)
         except PermissionDenied as exc:
             outcome, detail, error = "failed", str(exc), {"type": "permission_denied"}
         except _DependencyFailed as exc:
@@ -207,6 +211,8 @@ class Executor:
             assert proposal is not None and execution is not None
             proposal.status = status
             proposal.result_page_id = page_id
+            if outcome == "verified" and kind in AUTO_ALLOWED:
+                proposal.restore = prior
             execution.outcome = outcome
             execution.finished_at = datetime.now(UTC)
             execution.error = error
@@ -225,6 +231,49 @@ class Executor:
                 },  # fmt: skip
             )
         return ExecutionResult(proposal_id, outcome, page_id, detail)
+
+    async def undo(self, proposal_id: uuid.UUID) -> ExecutionResult:
+        """Write back the values a verified automatic-capable change replaced. Refused
+        (`stale`) when the page no longer has what the change wrote: undoing then would
+        overwrite the owner's own edit."""
+        if not self.writes_enabled:
+            return ExecutionResult(proposal_id, "blocked", detail="writes are disabled")
+        async with self.session_factory() as session:
+            proposal = await session.scalar(
+                select(ActionProposal).where(
+                    ActionProposal.id == proposal_id, ActionProposal.user_id == self.user_id
+                )
+            )
+        if proposal is None:
+            raise LookupError(proposal_id)
+        if proposal.status != "executed" or proposal.restore is None or proposal.undone_at:
+            return ExecutionResult(proposal_id, "skipped", detail="this change can't be undone")
+        kind = ActionKind(proposal.kind)
+        page_id = proposal.result_page_id or proposal.target_page_id
+        written = build_plan(kind, parse_payload(kind, proposal.effective_payload), self.specs)
+        spec = self.specs[written.data_source]
+        fields = list(proposal.restore)
+        page = await self.client.get_page(page_id)
+        wrote = {k: v for k, v in expected_fields(written.values).items() if k in fields}
+        if read_fields(spec, page, fields) != wrote:
+            return ExecutionResult(proposal_id, "stale", page_id, "changed in Notion since")
+        values = _from_stored(spec, proposal.restore)
+        check_plan(WritePlan(written.data_source, page_id, values), spec)
+        await self.client.update_page(page_id, encode_properties(spec.properties, values))
+        page = await self.client.get_page(page_id)
+        if read_fields(spec, page, fields) != expected_fields(values):
+            outcome = "mismatch"
+        else:
+            outcome = "verified"
+        async with self.session_factory() as session, session.begin():
+            row = await session.get(ActionProposal, proposal_id, with_for_update=True)
+            assert row is not None
+            row.status = "undone"
+            row.undone_at = datetime.now(UTC)
+            audit(session, actor="user", event="proposal.undone", user_id=self.user_id,
+                  entity_type="proposal", entity_id=str(proposal_id),
+                  details={"kind": str(kind), "page_id": page_id, "outcome": outcome})  # fmt: skip
+        return ExecutionResult(proposal_id, outcome, page_id)
 
     async def _resolve_dependencies(
         self, session: AsyncSession, proposal: ActionProposal
@@ -252,7 +301,8 @@ class Executor:
 
     async def _apply(
         self, plan: WritePlan, snapshot: dict[str, Any] | None
-    ) -> tuple[str, str, str]:
+    ) -> tuple[str, str, str, dict[str, Any] | None]:
+        """Returns (page, outcome, detail, the written fields' values just before)."""
         spec = self.specs[plan.data_source]
         values = dict(plan.values)
 
@@ -260,23 +310,25 @@ class Executor:
             page = await self.client.get_page(plan.page_id)
             current = read_fields(spec, page, list(values))
             if current == expected_fields(values):
-                return plan.page_id, "noop", "already had the target values"
+                return plan.page_id, "noop", "already had the target values", None
             if snapshot:
                 now = {k: current.get(k) for k in snapshot}
                 if now != snapshot:
                     changed = sorted(k for k in snapshot if now.get(k) != snapshot[k])
-                    return plan.page_id, "stale", f"changed in Notion since proposal: {changed}"
+                    detail = f"changed in Notion since proposal: {changed}"
+                    return plan.page_id, "stale", detail, None
             await self.client.update_page(plan.page_id, encode_properties(spec.properties, values))
-            page_id = plan.page_id
+            page_id, prior = plan.page_id, current
         else:
             existing = await self._find_existing(plan)
             if existing and not plan.upsert:
-                return existing, "noop", "a matching page already exists"
+                return existing, "noop", "a matching page already exists", None
             if existing:
                 values.pop("title", None)  # keep the owner's existing title format
                 page = await self.client.get_page(existing)
-                if read_fields(spec, page, list(values)) == expected_fields(values):
-                    return existing, "noop", "already had the target values"
+                prior = read_fields(spec, page, list(values))
+                if prior == expected_fields(values):
+                    return existing, "noop", "already had the target values", None
                 await self.client.update_page(existing, encode_properties(spec.properties, values))
                 page_id = existing
             else:
@@ -284,14 +336,17 @@ class Executor:
                     spec.data_source_id, encode_properties(spec.properties, values)
                 )
                 page_id = created["id"]
+                prior = {k: None for k in values}  # nothing was there
 
         page = await self.client.get_page(page_id)
         actual = read_fields(spec, page, list(values))
         expected = expected_fields(values)
         if actual != expected:
             diff = sorted(k for k in expected if actual.get(k) != expected[k])
-            return page_id, "mismatch", f"fields differ after write: {diff}"
-        return page_id, "verified", ""
+            return page_id, "mismatch", f"fields differ after write: {diff}", None
+        # A row's identity (its title and date) stays when an automatic write is undone.
+        restore = {k: v for k, v in prior.items() if k not in ("title", "day")}
+        return page_id, "verified", "", restore
 
     async def _find_existing(self, plan: WritePlan) -> str | None:
         lookup = plan.lookup
@@ -336,3 +391,17 @@ async def take_snapshot(
     page = await client.get_page(plan.page_id)
     snapshot = read_fields(specs[plan.data_source], page, list(plan.values))
     return snapshot, parse_notion_datetime(page["last_edited_time"])
+
+
+def _from_stored(spec: DataSourceSpec, stored: dict[str, Any]) -> dict[str, Any]:
+    """Stored (normalised) values back into what the encoders take: dates from ISO strings,
+    an absent checkbox as unticked."""
+    values: dict[str, Any] = {}
+    for name, value in stored.items():
+        kind = spec.prop(name).type
+        if kind == "date" and isinstance(value, str):
+            value = date.fromisoformat(value)
+        elif kind == "checkbox":
+            value = bool(value)
+        values[name] = value
+    return values

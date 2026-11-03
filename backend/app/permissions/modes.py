@@ -1,5 +1,6 @@
 """An account's permission mode per action kind (architecture §6.3), stored in
-`account_settings`. Anything not chosen needs approval; `auto` stays reserved."""
+`account_settings`. Anything not chosen needs approval; `auto` is offered only for the kinds in
+`AUTO_ALLOWED`."""
 
 from __future__ import annotations
 
@@ -11,9 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.db.models import AccountSettings
 from app.execution.actions import ActionKind
 from app.execution.audit import audit
-from app.permissions.policy import DEFAULT_MODES, Mode
+from app.permissions.policy import AUTO_ALLOWED, DEFAULT_MODES, Mode
 
 EDITABLE = frozenset({Mode.APPROVE, Mode.SUGGEST, Mode.OFF})
+
+
+def choosable(kind: ActionKind, mode: Mode) -> bool:
+    return mode in EDITABLE or (mode == Mode.AUTO and kind in AUTO_ALLOWED)
 
 
 async def load_modes(
@@ -24,7 +29,8 @@ async def load_modes(
     modes = dict(DEFAULT_MODES)
     for kind, mode in (row.action_modes if row else {}).items():
         try:
-            modes[ActionKind(kind)] = Mode(mode)
+            if choosable(ActionKind(kind), Mode(mode)):
+                modes[ActionKind(kind)] = Mode(mode)
         except ValueError:
             continue  # a kind or mode that no longer exists
     return modes

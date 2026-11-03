@@ -29,10 +29,12 @@ from app.execution.actions import ActionKind
 from app.llm.access import AccountLLM
 from app.notion.errors import NotionError
 from app.notion.schema import check_data_source
-from app.permissions.modes import EDITABLE, save_modes
-from app.permissions.policy import Mode
+from app.permissions.modes import choosable, save_modes
+from app.permissions.policy import AUTO_ALLOWED, Mode
 from app.workflows.common import apply_decisions, proposal_cards
 from app.workflows.runner import WAITING
+
+UNDO_DAYS = 7  # how long an automatic change can be undone from the app
 
 router = APIRouter()
 protected = APIRouter(dependencies=[Depends(require_user)])
@@ -319,6 +321,19 @@ async def approvals(ctx: Context) -> dict[str, Any]:
                 .order_by(ActionProposal.created_at)
             )
         )
+        since = deps.clock() - timedelta(days=UNDO_DAYS)
+        automatic = list(
+            await session.scalars(
+                select(ActionProposal.id)
+                .where(
+                    ActionProposal.user_id == deps.user_id,
+                    ActionProposal.auto_applied.is_(True),
+                    ActionProposal.decided_at >= since,
+                )
+                .order_by(ActionProposal.decided_at.desc())
+                .limit(20)
+            )
+        )
     runs = []
     for run in waiting:
         ids = [c["id"] for c in ((run.output or {}).get("waiting_for") or {}).get("proposals", [])]
@@ -333,7 +348,32 @@ async def approvals(ctx: Context) -> dict[str, Any]:
     return {
         "runs": runs,
         "standalone": await proposal_cards(deps, [str(i) for i in standalone], {}),
+        # Applied without asking (auto mode) in the last week, each undoable until changed.
+        "automatic": await proposal_cards(deps, [str(i) for i in automatic], {}),
     }
+
+
+@protected.post("/proposals/{proposal_id}/undo")
+async def undo(proposal_id: uuid.UUID, ctx: Context) -> dict[str, Any]:
+    """Put back what an automatic change replaced, unless the page changed since."""
+    deps = ctx.deps
+    async with deps.session_factory() as session:
+        row = await session.scalar(
+            select(ActionProposal).where(
+                ActionProposal.id == proposal_id, ActionProposal.user_id == deps.user_id
+            )
+        )
+    if row is None:
+        raise ApiError(404, "unknown_proposal", "no such proposal")
+    if not row.auto_applied or row.decided_at < deps.clock() - timedelta(days=UNDO_DAYS):
+        raise ApiError(409, "not_undoable", "only recent automatic changes can be undone")
+    result = await deps.executor("user").undo(proposal_id)
+    if result.outcome == "stale":
+        raise ApiError(409, "changed_since", "the page changed in Notion since; undo it there")
+    if result.outcome == "skipped":
+        raise ApiError(409, "not_undoable", result.detail or "this change can't be undone")
+    return {"proposal_id": str(proposal_id), "outcome": result.outcome,
+            "writes_enabled": deps.writes_enabled}  # fmt: skip
 
 
 @protected.get("/proposals")
@@ -476,6 +516,7 @@ async def get_settings_view(
             "tokens_today": tokens_today,
         },
         "modes": {str(kind): str(mode) for kind, mode in ctx.deps.modes.items()},
+        "auto_kinds": sorted(str(kind) for kind in AUTO_ALLOWED),
     }
 
 
@@ -492,8 +533,8 @@ async def set_modes(body: ModesBody, request: Request, ctx: Context) -> dict[str
             changes[ActionKind(kind)] = Mode(mode)
         except ValueError as exc:
             raise ApiError(422, "invalid_request", f"unknown kind or mode: {kind}={mode}") from exc
-        if changes[ActionKind(kind)] not in EDITABLE:
-            raise ApiError(422, "invalid_request", f"{mode} isn't available")
+        if not choosable(ActionKind(kind), changes[ActionKind(kind)]):
+            raise ApiError(422, "invalid_request", f"{mode} isn't available for {kind}")
     modes = await save_modes(svc.session_factory, ctx.deps.user_id, changes)
     await svc.contexts.forget(ctx.deps.user_id)
     return {"modes": {str(k): str(v) for k, v in modes.items()}}

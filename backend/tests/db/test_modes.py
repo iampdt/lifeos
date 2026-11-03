@@ -40,7 +40,7 @@ async def test_modes_are_listed_and_changed(api):
     changed = await api.put("/api/v1/settings/modes", json={"modes": {"habit.upsert_day": "off"}})
     assert changed.json()["modes"]["habit.upsert_day"] == "off"
     assert (await api.get("/api/v1/settings")).json()["modes"]["habit.upsert_day"] == "off"
-    for bad in ({"habit.upsert_day": "auto"}, {"task.delete": "off"}, {"task.create": "maybe"}):
+    for bad in ({"task.create": "auto"}, {"task.delete": "off"}, {"task.create": "maybe"}):
         assert (await api.put("/api/v1/settings/modes", json={"modes": bad})).status_code == 422
 
 

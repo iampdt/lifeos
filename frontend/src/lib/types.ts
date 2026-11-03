@@ -27,6 +27,10 @@ export type ProposalCard = {
   /** Scorecard proposals: the workspace's names and units for the habit and metric keys. */
   labels?: Record<string, string>;
   units?: Record<string, string>;
+  /** Applied without asking (automatic mode), and whether it can still be undone. */
+  auto_applied?: boolean;
+  undoable?: boolean;
+  decided_at?: string | null;
 };
 
 export type QuestionRequest = {
@@ -163,6 +167,7 @@ export type RunView = {
 export type Approvals = {
   runs: { run_id: string; workflow: string; started_at: string; proposals: ProposalCard[] }[];
   standalone: ProposalCard[];
+  automatic?: ProposalCard[];
 };
 
 export type DecisionResult = {
@@ -188,6 +193,8 @@ export type SettingsView = {
     tokens_today: number;
   };
   modes: Record<string, string>;
+  /** Kinds that may run automatically. */
+  auto_kinds?: string[];
 };
 
 export type NotionStatus = {

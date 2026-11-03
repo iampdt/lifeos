@@ -34,6 +34,13 @@ class Mode(StrEnum):
 
 DEFAULT_MODES: dict[ActionKind, Mode] = {kind: Mode.APPROVE for kind in ActionKind}
 
+# Kinds an account may run in `auto` mode: they only record numbers the owner reported (pages
+# read, a goal's progress, the day's scorecard), and each can be undone by writing back the
+# values from just before. Anything that moves, cancels, creates or closes work needs approval.
+AUTO_ALLOWED = frozenset(
+    {ActionKind.BOOK_UPDATE_PROGRESS, ActionKind.GOAL_SET_CURRENT, ActionKind.HABIT_UPSERT_DAY}
+)
+
 
 class PermissionDenied(Exception):
     pass

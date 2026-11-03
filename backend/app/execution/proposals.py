@@ -194,7 +194,7 @@ class ProposalService:
     ) -> ActionProposal:
         proposal = await self._load_for_decision(proposal_id)
         kind = ActionKind(proposal.kind)
-        if self.modes.get(kind, Mode.APPROVE) != Mode.APPROVE:
+        if self.modes.get(kind, Mode.APPROVE) not in (Mode.APPROVE, Mode.AUTO):
             raise ProposalError(f"{kind} is in {self.modes[kind]} mode and can't be executed")
         if edits:
             merged = {**proposal.payload, **edits}

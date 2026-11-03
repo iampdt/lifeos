@@ -28,7 +28,7 @@ Every error has the same shape:
 | 401 | `unauthorized`, `invalid_credentials`, `bad_signature` |
 | 403 | `csrf_failed`, `password_sign_in_disabled`, `session_required`, `demo_account`, `environment_workspace`, `deployment_key` |
 | 404 | `unknown_workflow`, `unknown_job`, `unknown_note`, `unknown_page`, `not_shared`, `http_error` |
-| 409 | `run_state` (run not found or not waiting), `run_owned` (decide it through its run), `no_workspace`, `notion_reconnect`, `not_connected`, `disclosure_changed` |
+| 409 | `run_state` (run not found or not waiting), `run_owned` (decide it through its run), `no_workspace`, `notion_reconnect`, `not_connected`, `disclosure_changed`, `memory_full`, `knowledge_full`, `changed_since`, `not_undoable` |
 | 422 | `invalid_request`, `confirmation_mismatch`, `invalid_mapping` (with `details`), `key_rejected` |
 | 429 | `rate_limited` (sign-in) |
 | 502 | `notion_<code>`, `run_failed` |
@@ -92,7 +92,8 @@ month during the first week of a month, otherwise this month).
 
 | Method and path | Description |
 | --- | --- |
-| `GET /approvals` | `{runs: [{run_id, workflow, started_at, proposals}], standalone: [proposal]}`: everything waiting for a decision |
+| `GET /approvals` | `{runs: [{run_id, workflow, started_at, proposals}], standalone: [proposal], automatic: [proposal]}`: everything waiting for a decision, and the last week's automatic changes (each card has `auto_applied`, `undoable`, `decided_at`) |
+| `POST /proposals/{id}/undo` | Writes back what an automatic change replaced. 409 `changed_since` when the page changed in Notion afterwards, 409 `not_undoable` (not automatic, older than 7 days, or already undone), 404 `unknown_proposal` |
 | `GET /proposals?status=pending&limit=` | Proposals by status |
 | `POST /proposals/{id}/approve` | Body `{edits?, note?}`. Approves and executes. 409 if the proposal belongs to a run waiting for approval |
 | `POST /proposals/{id}/reject` | Body `{note?}` |
@@ -142,7 +143,7 @@ Outcomes: `verified`, `noop`, `mismatch`, `stale`, `failed`, `blocked` (writes o
 | --- | --- |
 | `GET /tasks?view=active\|today\|overdue\|inbox\|next7` | Tasks from the corresponding view |
 | `GET /settings` | Workspace (`notion_profile`: `live`, `sandbox`, `demo` or `account`), write switch, timezone, major tasks a day, today's date in that timezone, model chains, tokens used today, permission modes (`modes`: kind → `approve`, `suggest` or `off`) |
-| `PUT /settings/modes` | Body `{modes: {kind: mode}}` with `approve`, `suggest` or `off`; only the kinds sent change. Returns every kind's mode. An unknown kind or mode, or `auto`, is 422 `invalid_request`; the demo answers 403 `demo_account` |
+| `PUT /settings/modes` | Body `{modes: {kind: mode}}` with `approve`, `suggest` or `off`, or `auto` for the kinds in `GET /settings`'s `auto_kinds`; only the kinds sent change. Returns every kind's mode. An unknown kind or mode, or `auto` for another kind, is 422 `invalid_request`; the demo answers 403 `demo_account` |
 | `GET /notion/status` | Integration name, workspace, and per data source: reachable, schema matches, drift details |
 
 ### Workspace mapping
