@@ -47,6 +47,7 @@ from app.notion.errors import NotionError
 from app.notion.mapping import DataSourceSpec, load_mapping
 from app.notion.oauth import NotionOAuth
 from app.notion.rate_limiter import AsyncTokenBucket
+from app.permissions.modes import load_modes
 from app.workflows.contexts import Contexts, UserContext
 from app.workflows.deps import WorkflowDeps, utcnow
 from app.workflows.runner import RunStateError, UnknownWorkflow
@@ -93,7 +94,11 @@ async def build_demo_services(settings: Settings, stack: AsyncExitStack) -> Serv
         writes_enabled=True,  # writes go to the in-memory workspace
         tz=ZoneInfo(settings.timezone),
     )
-    contexts = Contexts(lambda user_id: make_deps(user_id=user_id), InMemorySaver())
+    contexts = Contexts(
+        lambda user_id: make_deps(user_id=user_id),
+        InMemorySaver(),
+        modes_for=partial(load_modes, session_factory),
+    )
     user = await demo_user(session_factory)
     context = await contexts.for_user(user.id, is_owner=True)
     assert context is not None
@@ -156,6 +161,7 @@ async def build_services(settings: Settings, stack: AsyncExitStack) -> Services:
         lambda user_id: make_deps(user_id=user_id) if environment else None,
         saver,
         account_deps=accounts.deps_for if accounts else None,
+        modes_for=partial(load_modes, session_factory),
     )
     return Services(
         settings,

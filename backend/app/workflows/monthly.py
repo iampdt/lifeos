@@ -174,7 +174,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
         ids = await builder.commit(
             run_id=run_uuid(state), ttl=timedelta(days=7), actor=f"agent:{NAME}"
         )
-        return {"proposal_ids": [str(i) for i in ids], "warnings": warnings}
+        return {"proposal_ids": [str(i) for i in ids], "warnings": warnings + builder.notes()}
 
     async def summarize(state: MonthlyState) -> dict[str, Any]:
         review = state.get("review") or {}

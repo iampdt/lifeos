@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { useSettings } from "@/components/app-shell";
 import { AIAccessCard } from "@/components/ai-access";
+import { ModesEditor } from "@/components/modes-editor";
 import { NotionConnectionCard } from "@/components/notion-connection";
 import { type Me, useSession } from "@/components/session";
 import { Badge } from "@/components/ui/badge";
@@ -56,7 +57,7 @@ export default function SettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Safety</CardTitle>
-                <CardDescription>Set on the server; shown here read-only.</CardDescription>
+                <CardDescription>Writes and the workspace are set on the server; you choose how each change is handled.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-3 text-sm">
                 {!s && <Skeleton className="h-24" />}
@@ -69,15 +70,7 @@ export default function SettingsPage() {
                       <span className="ml-2 text-xs text-muted-foreground">LIFEOS_WRITES_ENABLED</span>
                     </Row>
                     <Row label="Timezone">{s.timezone}</Row>
-                    <div>
-                      <p className="mb-1.5 text-muted-foreground">Permission mode per action</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {Object.entries(s.modes).map(([kind, mode]) => (
-                          <Badge key={kind} variant="outline" className="font-mono text-[11px]">{kind}: {mode}</Badge>
-                        ))}
-                      </div>
-                      <p className="mt-1.5 text-xs text-muted-foreground">Every change needs your approval in v1.</p>
-                    </div>
+                    <ModesEditor modes={s.modes} readOnly={s.demo} />
                   </>
                 )}
               </CardContent>

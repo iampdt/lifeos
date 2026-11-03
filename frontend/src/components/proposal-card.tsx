@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { formatDay, humanize } from "@/lib/format";
 import type { ProposalCard as Card } from "@/lib/types";
 
-const KIND_LABELS: Record<string, string> = {
+export const KIND_LABELS: Record<string, string> = {
   "task.mark_done": "Mark done",
   "task.set_due": "Move",
   "task.set_status": "Change status",

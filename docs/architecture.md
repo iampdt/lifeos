@@ -265,7 +265,14 @@ field values.
 
 - A **field allowlist** per data source (`permissions/policy.py`). Goals: `Current` only. A plan
   that touches any other field is refused.
-- **Modes** per action kind: `off`, `suggest`, `approve` (every kind in v1), and `auto` (reserved).
+- **Modes** per action kind, chosen per account in Settings (`account_settings`; anything not
+  chosen is `approve`):
+  - `approve`: proposed, and executed once approved.
+  - `suggest`: proposed and shown, but approving it is refused; nothing is executed.
+  - `off`: never proposed. The run says so in its warnings. A new due date whose weekly or
+    monthly page doesn't exist yet, with creating that page `off`, is proposed without the link.
+    Chat refuses a request that needs an `off` kind.
+  - `auto` (reserved): not offered.
 - The **kill switch** `LIFEOS_WRITES_ENABLED=false` blocks every write regardless of approval.
 
 ### 6.4 Idempotency
@@ -422,7 +429,6 @@ a Notion account:
 - **Memory:** long-term facts the owner can see and edit; a knowledge index over selected Notion
   pages (pgvector) with cited answers.
 - **Goal and learning specialists**, and an optional `goal.set_current` action.
-- **Editable settings:** permission modes and schedules from the UI.
 - **Quality bar:** more evaluation suites (weekly and monthly review, chat tool use).
 - **Multi-user:** sign-up, Notion OAuth per user, per-user data, onboarding from a Notion
   template, paid model and hosting tiers.

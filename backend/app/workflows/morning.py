@@ -132,7 +132,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
         ids = await builder.commit(
             run_id=run_uuid(state), ttl=timedelta(hours=24), actor=f"agent:{NAME}"
         )
-        return {"proposal_ids": [str(i) for i in ids], "warnings": warnings}
+        return {"proposal_ids": [str(i) for i in ids], "warnings": warnings + builder.notes()}
 
     async def brief(state: MorningState) -> dict[str, Any]:
         today = date.fromisoformat(state["today"])

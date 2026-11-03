@@ -36,9 +36,11 @@ class Contexts:
         checkpointer: BaseCheckpointSaver,
         *,
         account_deps: Callable[[uuid.UUID, bool], Awaitable[WorkflowDeps | None]] | None = None,
+        modes_for: Callable[[uuid.UUID], Awaitable[dict]] | None = None,
     ) -> None:
         self._owner_deps = owner_deps
         self._account_deps = account_deps
+        self._modes_for = modes_for  # the account's permission modes, read when a context is built
         self.checkpointer = checkpointer
         self._cache: dict[uuid.UUID, UserContext] = {}
 
@@ -53,6 +55,8 @@ class Contexts:
             deps = self._owner_deps(user_id)
         if deps is None:
             return None
+        if self._modes_for is not None:
+            deps.modes = await self._modes_for(user_id)
         context = UserContext(deps, WorkflowRunner(deps, self.checkpointer), own_client)
         self._cache[user_id] = context
         return context

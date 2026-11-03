@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from functools import partial
 from typing import Any
 
 from langgraph.checkpoint.memory import InMemorySaver
@@ -21,6 +22,7 @@ from app.domain.models import Task
 from app.llm.mock import MockLLM
 from app.llm.router import LLMRouter
 from app.notion.codecs import DateValue, RelationValue, decode_property
+from app.permissions.modes import load_modes
 from app.workflows.contexts import Contexts
 from app.workflows.deps import WorkflowDeps
 from app.workflows.runner import WorkflowRunner
@@ -77,7 +79,7 @@ def make_services(
             return owner
         return make_deps(session_factory, fake, mock, now=now, writes=writes, user_id=user_id)
 
-    contexts = Contexts(deps_for, InMemorySaver())
+    contexts = Contexts(deps_for, InMemorySaver(), modes_for=partial(load_modes, session_factory))
     services = Services(
         settings or Settings(_env_file=None), session_factory, contexts, clock=lambda: now, **extra
     )

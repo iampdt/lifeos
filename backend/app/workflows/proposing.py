@@ -15,8 +15,18 @@ from typing import Any, Literal
 
 from app.execution.actions import ActionKind, Payload, SetDue
 from app.execution.executor import take_snapshot
+from app.permissions.policy import Mode
 from app.services.periods import PeriodResolver, PeriodTarget
 from app.workflows.deps import WorkflowDeps
+
+KIND_NAMES = {
+    ActionKind.TASK_MARK_DONE: "Marking tasks done", ActionKind.TASK_SET_DUE: "Due-date",
+    ActionKind.TASK_SET_STATUS: "Status", ActionKind.TASK_CREATE: "New-task",
+    ActionKind.HABIT_UPSERT_DAY: "Scorecard", ActionKind.WEEK_CREATE: "New weekly page",
+    ActionKind.WEEK_CLOSE: "Closing the week", ActionKind.MONTH_CREATE: "New monthly page",
+    ActionKind.MONTH_CLOSE: "Closing the month",
+    ActionKind.BOOK_UPDATE_PROGRESS: "Reading progress",
+}  # fmt: skip
 
 
 @dataclass
@@ -38,6 +48,20 @@ class ProposalBuilder:
         self.resolver = resolver
         self._drafts: list[_Draft] = []
         self._period_keys: set[tuple[str, str]] = set()
+        self.switched_off: set[ActionKind] = set()  # kinds the account turned off, skipped
+
+    def _off(self, kind: ActionKind) -> bool:
+        if self.deps.mode(kind) == Mode.OFF:
+            self.switched_off.add(kind)
+            return True
+        return False
+
+    def notes(self) -> list[str]:
+        """Say what wasn't proposed because the account switched it off in Settings."""
+        return [
+            f"{KIND_NAMES.get(kind, kind)} changes are off in Settings, so none were proposed."
+            for kind in sorted(self.switched_off)
+        ]
 
     def __len__(self) -> int:
         return len(self._drafts)
@@ -51,6 +75,8 @@ class ProposalBuilder:
         rule_ids: tuple[str, ...] = (),
         title: str | None = None,
     ) -> None:
+        if self._off(kind):
+            return
         snapshot, edited = await take_snapshot(self.deps.notion, self.deps.specs, kind, payload)
         self._drafts.append(_Draft(kind, reason, rule_ids, payload, snapshot, edited, title=title))
 
@@ -58,6 +84,8 @@ class ProposalBuilder:
         if target is None or target.create is None or target.key in self._period_keys:
             return
         kind = ActionKind.WEEK_CREATE if target.kind == "week" else ActionKind.MONTH_CREATE
+        if self._off(kind):
+            return
         self._period_keys.add(target.key)
         self._drafts.append(_Draft(kind, reason, ("R7",), target.create, creates_period=target.key))
 
@@ -71,8 +99,15 @@ class ProposalBuilder:
         rule_ids: tuple[str, ...],
         title: str | None = None,
     ) -> None:
+        if self._off(ActionKind.TASK_SET_DUE):
+            return
         week = await self.resolver.resolve("week", new_due)
         month = await self.resolver.resolve("month", new_due)
+        # A missing period page that may not be created is simply not linked.
+        if week and week.create and self.deps.mode(ActionKind.WEEK_CREATE) == Mode.OFF:
+            week = None
+        if month and month.create and self.deps.mode(ActionKind.MONTH_CREATE) == Mode.OFF:
+            month = None
         await self.ensure_period(week, f"Weekly page for {new_due:%d %b} (R7).")
         await self.ensure_period(month, f"Monthly page for {new_due:%b %Y} (R7).")
         placeholder = _set_due(page_id, new_due, decision, week, month, {})

@@ -262,3 +262,13 @@ class AIUsage(Base):
     day: Mapped[date] = mapped_column(Date, primary_key=True)
     service_tokens: Mapped[int] = mapped_column(Integer, default=0)
     own_tokens: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class AccountSettings(Base):
+    """An account's choices that apply whatever its workspace: the permission mode of each
+    action kind (approve, suggest or off; anything not listed needs approval)."""
+
+    __tablename__ = "account_settings"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    action_modes: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)

@@ -25,10 +25,12 @@ from app.auth.google import GoogleSignInError, new_pkce
 from app.auth.sessions import SESSION_COOKIE, SessionService, normalize_email
 from app.db.models import ActionProposal, AgentRun, OAuthState
 from app.demo.setup import demo_user, reset_demo
+from app.execution.actions import ActionKind
 from app.llm.access import AccountLLM
 from app.notion.errors import NotionError
 from app.notion.schema import check_data_source
-from app.permissions.policy import DEFAULT_MODES
+from app.permissions.modes import EDITABLE, save_modes
+from app.permissions.policy import Mode
 from app.workflows.common import apply_decisions, proposal_cards
 from app.workflows.runner import WAITING
 
@@ -67,6 +69,10 @@ class ChatBody(BaseModel):
 class BatchDecision(BaseModel):
     ids: list[uuid.UUID] = Field(min_length=1, max_length=50)
     note: str | None = Field(default=None, max_length=500)
+
+
+class ModesBody(BaseModel):
+    modes: dict[str, str] = Field(max_length=20)
 
 
 class DeleteAccount(BaseModel):
@@ -469,9 +475,28 @@ async def get_settings_view(
             "daily_token_budget": llm.daily_token_budget,
             "tokens_today": tokens_today,
         },
-        # Editable modes come later; every kind needs approval in v1.
-        "modes": {str(kind): str(mode) for kind, mode in DEFAULT_MODES.items()},
+        "modes": {str(kind): str(mode) for kind, mode in ctx.deps.modes.items()},
     }
+
+
+@protected.put("/settings/modes")
+async def set_modes(body: ModesBody, request: Request, ctx: Context) -> dict[str, Any]:
+    """Change how each action kind is handled: approve (the default), suggest (shown, never
+    executed) or off (never proposed)."""
+    svc = services(request)
+    if svc.settings.lifeos_demo_mode:
+        raise ApiError(403, "demo_account", "the shared demo's settings can't be changed")
+    changes: dict[ActionKind, Mode] = {}
+    for kind, mode in body.modes.items():
+        try:
+            changes[ActionKind(kind)] = Mode(mode)
+        except ValueError as exc:
+            raise ApiError(422, "invalid_request", f"unknown kind or mode: {kind}={mode}") from exc
+        if changes[ActionKind(kind)] not in EDITABLE:
+            raise ApiError(422, "invalid_request", f"{mode} isn't available")
+    modes = await save_modes(svc.session_factory, ctx.deps.user_id, changes)
+    await svc.contexts.forget(ctx.deps.user_id)
+    return {"modes": {str(k): str(v) for k, v in modes.items()}}
 
 
 @protected.get("/notion/status")

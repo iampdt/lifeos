@@ -15,11 +15,13 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.execution.actions import ActionKind
 from app.execution.executor import Executor
 from app.execution.proposals import ProposalService
 from app.llm.router import LLMRouter
 from app.notion.mapping import DataSourceSpec
 from app.notion.workspace import NotionWorkspace, build_workspace
+from app.permissions.policy import DEFAULT_MODES, Mode
 from app.services.calendar import DEFAULT_TZ
 from app.services.periods import PeriodResolver
 from app.services.rules import MAX_MAJOR_PER_DAY, Vocabulary
@@ -50,6 +52,8 @@ class WorkflowDeps:
     rules: RuleSettings = field(default_factory=RuleSettings)
     # "environment" (NOTION_TOKEN and the YAML mapping) or "account" (OAuth and a saved mapping).
     workspace_source: str = "environment"
+    # The account's permission mode per action kind (approve unless it chose otherwise).
+    modes: dict[ActionKind, Mode] = field(default_factory=lambda: dict(DEFAULT_MODES))
     workspace: NotionWorkspace = field(init=False)
     vocab: Vocabulary = field(init=False)
     scorecard: Scorecard = field(init=False)
@@ -79,7 +83,12 @@ class WorkflowDeps:
         )
 
     def proposals(self, session: AsyncSession) -> ProposalService:
-        return ProposalService(session, user_id=self.user_id, clock=self.clock, tz=self.tz)
+        return ProposalService(
+            session, user_id=self.user_id, modes=self.modes, clock=self.clock, tz=self.tz
+        )
+
+    def mode(self, kind: ActionKind) -> Mode:
+        return self.modes.get(kind, Mode.APPROVE)
 
     def resolver(self, today: date) -> PeriodResolver:
         """Tasks link to weekly and monthly pages only where the workspace has both the

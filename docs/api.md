@@ -139,7 +139,8 @@ Outcomes: `verified`, `noop`, `mismatch`, `stale`, `failed`, `blocked` (writes o
 | Method and path | Description |
 | --- | --- |
 | `GET /tasks?view=active\|today\|overdue\|inbox\|next7` | Tasks from the corresponding view |
-| `GET /settings` | Workspace (`notion_profile`: `live`, `sandbox`, `demo` or `account`), write switch, timezone, major tasks a day, today's date in that timezone, model chains, tokens used today, permission modes |
+| `GET /settings` | Workspace (`notion_profile`: `live`, `sandbox`, `demo` or `account`), write switch, timezone, major tasks a day, today's date in that timezone, model chains, tokens used today, permission modes (`modes`: kind → `approve`, `suggest` or `off`) |
+| `PUT /settings/modes` | Body `{modes: {kind: mode}}` with `approve`, `suggest` or `off`; only the kinds sent change. Returns every kind's mode. An unknown kind or mode, or `auto`, is 422 `invalid_request`; the demo answers 403 `demo_account` |
 | `GET /notion/status` | Integration name, workspace, and per data source: reachable, schema matches, drift details |
 
 ### Workspace mapping

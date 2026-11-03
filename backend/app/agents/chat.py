@@ -331,6 +331,8 @@ class ChatAgent:
                                   rule_ids=("R11",) if not due else ("R1",))  # fmt: skip
             case _:
                 raise _Refused(f"unknown tool {step.tool!r}")
+        if builder.switched_off:
+            raise _Refused(" ".join(builder.notes()))
         ids = await builder.commit(run_id=run_id, ttl=timedelta(hours=24), actor="agent:chat")
         cards = await proposal_cards(deps, [str(i) for i in ids], {})
         summary = "; ".join(f"{c['kind']} for {c['target']['title']!r}" for c in cards)

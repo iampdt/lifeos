@@ -107,4 +107,5 @@ replaced. Dates are when the decision was made.
 | I46 | The owner's move | An account workspace takes precedence over the environment's for the owner too, so moving is one saved mapping (the environment's, checked against the owner's connection) and `NOTION_TOKEN` can then go; the owner keeps the deployment's AI key |
 | I47 | Privacy and terms | Written from what the code stores and sends, not from a template; the AI section matches the consent disclosure |
 | I48 | Late schedules | Opening the app starts the account's due routines that haven't run, claimed like the tick's, because GitHub's schedules ran up to 8 hours late; the tick stays the source of truth for accounts that don't open the app |
+| I49 | Editable permission modes | Per account, stored as the changes from `approve`, so a new action kind needs approval until chosen otherwise; `auto` stays unavailable until an allowlist of safe actions and an undo exist. `off` is applied where proposals are built, so the run explains what was left out |
 
