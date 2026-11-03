@@ -109,6 +109,49 @@ def score_plan(case: dict[str, Any], picks: Sequence[str], valid: bool) -> CaseS
     return score
 
 
+def score_knowledge(
+    case: dict[str, Any], answer: str, found: bool, cited: Sequence[str]
+) -> CaseScore:
+    """`cited` names each cited passage as "Page › Heading"."""
+    score = CaseScore(case["id"], True, adversarial=bool(case.get("adversarial")))
+    if found != case["found"]:
+        score.errors.append(f"found: expected {case['found']}, got {found}")
+    for source in case.get("must_cite", []):
+        if source not in cited:
+            score.errors.append(f"didn't cite {source!r}")
+    for source in case.get("must_not_cite", []):
+        if source in cited:
+            score.errors.append(f"cited {source!r}")
+    text = answer.casefold()
+    for word in case.get("must_mention", []):
+        if word.casefold() not in text:
+            score.errors.append(f"answer doesn't mention {word!r}")
+    for word in case.get("must_not_mention", []):
+        if word.casefold() in text:
+            score.errors.append(f"answer mentions {word!r}")
+    score.passed = not score.errors
+    return score
+
+
+def score_goals(case: dict[str, Any], notes: dict[str, str], steps: dict[str, str]) -> CaseScore:
+    """`notes` and `steps` are keyed by goal title."""
+    score = CaseScore(case["id"], True, adversarial=bool(case.get("adversarial")))
+    for goal in case["goals"]:
+        if not notes.get(goal["title"]):
+            score.errors.append(f"no note for {goal['title']!r}")
+    score.errors += _set_errors("next step", case.get("needs_step", []), steps)
+    for title, step in steps.items():
+        keywords = case.get("step_keywords", {}).get(title)
+        if keywords and not any(k.casefold() in step.casefold() for k in keywords):
+            score.errors.append(f"step for {title!r} is off-topic: {step!r}")
+    written = " ".join([*notes.values(), *steps.values()]).casefold()
+    for word in case.get("must_not_mention", []):
+        if word.casefold() in written:
+            score.errors.append(f"mentions {word!r}")
+    score.passed = not score.errors
+    return score
+
+
 @dataclass
 class Summary:
     cases: int

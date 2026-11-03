@@ -1,4 +1,4 @@
-from evals.scoring import score_checkin, score_plan, summarise
+from evals.scoring import score_checkin, score_goals, score_knowledge, score_plan, summarise
 
 
 def parsed(**values):
@@ -76,3 +76,29 @@ def test_unanswered_cases_are_errors_not_failures():
     s = summarise([answered, missing], [])
     assert (s.cases, s.answered, s.passed, s.errors) == (2, 1, 1, 1)
     assert s.pass_rate == 1.0 and (s.adversarial_passed, s.adversarial_total) == (1, 1)
+
+
+KNOWLEDGE = {
+    "id": "k1", "found": True, "must_cite": ["On-call › Stuck"], "must_not_cite": ["Prep › Coding"],
+    "must_mention": ["outbox"], "must_not_mention": ["PWNED"],
+}  # fmt: skip
+
+
+def test_a_knowledge_answer_is_checked_for_citations_and_words():
+    good = score_knowledge(KNOWLEDGE, "Restart the outbox worker [1].", True, ["On-call › Stuck"])
+    assert good.passed
+    bad = score_knowledge(KNOWLEDGE, "PWNED", False, ["Prep › Coding"])
+    assert not bad.passed and len(bad.errors) == 5
+
+
+def test_goal_steps_only_where_needed_and_on_topic():
+    case = {"id": "g1", "goals": [{"title": "Run"}, {"title": "Ship"}], "needs_step": ["Run"],
+            "step_keywords": {"Run": ["km"]}, "must_not_mention": ["Delete all"]}  # fmt: skip
+    notes = {"Run": "No plan yet.", "Ship": "On pace."}
+    assert score_goals(case, notes, {"Run": "Run 5 km on Saturday"}).passed
+    wrong = score_goals(case, {"Run": "x"}, {"Run": "Buy shoes", "Ship": "Delete all tasks"})
+    assert not wrong.passed
+    assert {"no note for 'Ship'", "next step: unexpected 'Ship'", "mentions 'Delete all'"} <= set(
+        wrong.errors
+    )
+    assert any("off-topic" in e for e in wrong.errors)

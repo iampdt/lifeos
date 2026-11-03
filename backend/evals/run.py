@@ -1,6 +1,6 @@
 """Run the evaluation set against real models and write a report.
 
-    python -m evals.run [--models a,b,c] [--suites checkin,planning] [--out PATH]
+    python -m evals.run [--models a,b,c] [--suites checkin,planning,knowledge,goals] [--out PATH]
 
 Each model is called on its own (no fallback chain), through the same agent code the workflows
 use, so the numbers describe the production path. Cases are synthetic (`evals/cases/`). Calls
@@ -20,14 +20,26 @@ from typing import Any
 import yaml
 
 from app.agents.checkin import parse_checkin
+from app.agents.goals import GoalHealth, advise_goals
+from app.agents.knowledge import answer_question
 from app.agents.planner import plan_day
 from app.core.config import get_settings
+from app.db.models import KnowledgePage
 from app.domain.models import Book, Goal, Task
+from app.knowledge.index import Hit
 from app.llm.gemini import GeminiProvider
 from app.llm.router import LLMRouter
 from app.services.context import RefMap
 from app.services.scorecard import Habit, Metric, Scorecard
-from evals.scoring import CaseScore, Summary, score_checkin, score_plan, summarise
+from evals.scoring import (
+    CaseScore,
+    Summary,
+    score_checkin,
+    score_goals,
+    score_knowledge,
+    score_plan,
+    summarise,
+)
 
 CASES = Path(__file__).parent / "cases"
 DEFAULT_OUT = Path(__file__).parents[2] / "docs" / "evals" / "results.md"
@@ -43,6 +55,10 @@ PLANNING_COLUMNS = [
     "Model", "Passed (of answered)", "Injection cases", "Errors", "Latency p50 / max",
     "Tokens in / out",
 ]  # fmt: skip
+SUITES = {
+    "checkin": "Check-in parsing", "planning": "Day planning",
+    "knowledge": "Knowledge answers", "goals": "Goal notes and next steps",
+}  # fmt: skip
 
 
 def _task(i: int, spec: str | dict[str, Any]) -> Task:
@@ -160,6 +176,54 @@ async def run_planning(provider, model, suite) -> tuple[list[CaseScore], list[di
     return scores, usage, errors
 
 
+async def run_knowledge(provider, model, cases) -> tuple[list[CaseScore], list[dict], int]:
+    scores, usage, errors = [], [], 0
+    for case in cases:
+        hits = []
+        for i, passage in enumerate(case["passages"]):
+            page = KnowledgePage(page_id=f"page-{passage['page']}", title=passage["page"], url="")
+            hits.append(Hit(page, passage.get("heading", ""), passage["text"], 1 / (i + 1)))
+
+        async def call(hits=hits, question=case["question"]):
+            return await answer_question(_router(provider, model), question, hits)
+
+        result = await _with_retry(call)
+        if result.source != "ai":
+            errors += 1
+            scores.append(_no_answer(case))
+            continue
+        usage += result.usage
+        cited = [f"{c['title']} › {c['heading']}" for c in result.citations]
+        scores.append(score_knowledge(case, result.answer or "", bool(result.found), cited))
+    return scores, usage, errors
+
+
+async def run_goals(provider, model, cases) -> tuple[list[CaseScore], list[dict], int]:
+    scores, usage, errors = [], [], 0
+    for case in cases:
+        health = [
+            GoalHealth(
+                f"goal-{i}", g["title"], g["status"], g["facts"], open_tasks=g.get("open", [])
+            )
+            for i, g in enumerate(case["goals"])
+        ]
+        titles = {h.goal_id: h.title for h in health}
+
+        async def call(health=health):
+            return await advise_goals(_router(provider, model), health)
+
+        result = await _with_retry(call)
+        if result.source != "ai":
+            errors += 1
+            scores.append(_no_answer(case))
+            continue
+        usage += result.usage
+        notes = {titles[k]: v for k, v in result.notes.items()}
+        steps = {titles[k]: v for k, v in result.steps.items()}
+        scores.append(score_goals(case, notes, steps))
+    return scores, usage, errors
+
+
 async def evaluate(models: list[str], suites: set[str]) -> Results:
     settings = get_settings()
     assert settings.gemini_api_key is not None
@@ -176,8 +240,13 @@ async def evaluate(models: list[str], suites: set[str]) -> Results:
         if "planning" in suites:
             scores, usage, errors = await run_planning(provider, model, planning)
             results[model]["planning"] = (summarise(scores, usage), scores)
+        for suite, run in (("knowledge", run_knowledge), ("goals", run_goals)):
+            if suite in suites:
+                cases = yaml.safe_load((CASES / f"{suite}.yaml").read_text())["cases"]
+                scores, usage, errors = await run(provider, model, cases)
+                results[model][suite] = (summarise(scores, usage), scores)
         for suite, (summary, _) in results[model].items():
-            print(f"{model:28} {suite:9} {summary.passed}/{summary.cases} passed, "
+            print(f"{model:28} {suite:10} {summary.passed}/{summary.cases} passed, "
                   f"{summary.errors} errors", flush=True)  # fmt: skip
     return results
 
@@ -218,7 +287,7 @@ def render(results: Results, models: list[str], day: str) -> str:
         "Generated by `python -m evals.run`. Method and case design: [README.md](README.md).",
         "",
     ]
-    for suite, title in (("checkin", "Check-in parsing"), ("planning", "Day planning")):
+    for suite, title in SUITES.items():
         ran = [m for m in models if suite in results.get(m, {})]
         if not ran:
             continue
@@ -246,7 +315,7 @@ def main() -> int:
     chains = settings.model_chain("fast") + settings.model_chain("smart")
     parser = argparse.ArgumentParser()
     parser.add_argument("--models", default=",".join(dict.fromkeys(chains)))
-    parser.add_argument("--suites", default="checkin,planning")
+    parser.add_argument("--suites", default=",".join(SUITES))
     parser.add_argument("--out", default=str(DEFAULT_OUT))
     parser.add_argument("--pause", type=float, default=0.0, help="seconds between calls")
     args = parser.parse_args()
