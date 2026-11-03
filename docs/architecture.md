@@ -160,7 +160,7 @@ status, the request it is waiting on, its summary, and LLM tokens and latency.
 
 If today has more than 3 major tasks, the planner picks the 3 to keep and the rest are offered
 for the next days with a free slot. If today is empty, it proposes up to 3 tasks. The briefing
-lists today's priorities, the next 7 days, overdue tasks (pointed to Sunday's review) and days
+lists today's priorities, the next 7 days, overdue tasks (pointed to the weekly review) and days
 without a scorecard.
 
 ### 5.3 Weekly review
@@ -369,7 +369,10 @@ Productivity records stay in Notion. Postgres holds only state LifeOS owns. Migr
 | --- | --- |
 | `/login` | Sign-in |
 | `/` Command Center | Today's tasks and major-task count, evening check-in and morning briefing, recent runs, streaming chat, approvals drawer |
-| `/weekly` | Weekly review: metrics, draft review, decisions, Inbox triage, the owner's note, approval |
+| `/tasks` | Today, overdue, next 7 days, Inbox and all open tasks, with a filter; each links to its Notion page |
+| `/goals` | Goals with progress, success metric, deadline and their open tasks; the reading queue with pages read |
+| `/history` | Each day's morning briefing (priorities, observations) beside its evening check-in (finished, left over, scorecard, the next day's plan) |
+| `/weekly` Reviews | Weekly review: metrics, draft review, decisions, Inbox triage, the owner's note, approval; the monthly review |
 | `/settings` | Write switch, timezone, permission modes, model chains and tokens used, Notion connection and drift, account |
 | `/activity` | Runs and outcomes per routine, AI calls, tokens and model time, runs per day, recent runs |
 | `/privacy`, `/terms` | Public privacy policy and terms of use |

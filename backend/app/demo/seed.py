@@ -64,13 +64,16 @@ def seed_workspace(notion: InMemoryNotion, specs: dict[str, DataSourceSpec], tod
     notion.seed(specs["months"], {"title": month_title(today), "start": month_start,
                                   "end": month_end, "status": "Current"})  # fmt: skip
 
-    for title, kind, current, target in [
-        ("Land a backend engineering role", "Year", 3, 10),
-        ("Ship the sprint demo with zero open bugs", "Week", None, None),
-        ("Read 12 books this year", "Year", 9, 12),
-    ]:
-        notion.seed(specs["goals"], {"title": title, "type": kind, "status": "Active",
-                                     "current": current, "target": target})  # fmt: skip
+    goals = {}
+    for key, title, kind, current, target, metric in [
+        ("role", "Land a backend engineering role", "Year", 3, 10,
+         "Milestones from resume to signed offer"),
+        ("demo", "Ship the sprint demo with zero open bugs", "Week", None, None, ""),
+        ("books", "Read 12 books this year", "Year", 9, 12, "Books finished"),
+    ]:  # fmt: skip
+        goals[key] = notion.seed(specs["goals"], {"title": title, "type": kind, "status": "Active",
+                                                  "current": current, "target": target,
+                                                  "success_metric": metric})  # fmt: skip
 
     tasks = [
         # Due today: the three major tasks, plus a recurring one that doesn't count toward R1.
@@ -91,9 +94,15 @@ def seed_workspace(notion: InMemoryNotion, specs: dict[str, DataSourceSpec], tod
         ("Try the new Postgres 18 features", "Inbox", None, None, "Learning"),
         ("Renew passport", "Inbox", None, None, "Personal"),
     ]
+    linked = {
+        "Mock system design interview": "role", "Update resume summary": "role",
+        "Apply to two backend roles": "role", "Write unit tests for the payments service": "demo",
+        "Prepare sprint demo": "demo", "Read DDIA chapter 5": "books",
+    }  # fmt: skip
     for title, status, priority, due, area in tasks:
+        goal = [goals[linked[title]]] if title in linked else []
         notion.seed(specs["tasks"], {"title": title, "status": status, "priority": priority,
-                                     "due": due, "area": area})  # fmt: skip
+                                     "due": due, "area": area, "goal": goal})  # fmt: skip
     notion.seed(specs["tasks"], {"title": "Daily standup", "status": "Next", "due": day(0),
                                  "recurring": True, "area": "Work"})  # fmt: skip
     for title, area in [("Refactor notification worker", "Work"),

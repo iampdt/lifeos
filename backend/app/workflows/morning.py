@@ -6,7 +6,7 @@ Planning depends on today's major tasks (R1):
 - more than 3: choose 3 to keep and offer the rest for the next days with a free slot;
 - none: fill today from undated or later tasks;
 - 1–3: leave the day as it is.
-Overdue tasks are only counted and pointed to the Sunday review (R6).
+Overdue tasks are only counted and pointed to the weekly review (R6).
 """
 
 from __future__ import annotations
@@ -148,7 +148,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
         inbox = [t for t in active if vocab.status_key(t) == "inbox"]
         observations = []
         if late:
-            observations.append(f"{len(late)} overdue tasks wait for Sunday's review (R6).")
+            observations.append(f"{len(late)} overdue tasks wait for the weekly review (R6).")
         if state.get("missing_scorecards"):
             days = ", ".join(
                 date.fromisoformat(d).strftime("%d %b") for d in state["missing_scorecards"]

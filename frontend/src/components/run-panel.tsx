@@ -296,7 +296,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
   );
 }
 
-function List({ title, items }: { title: string; items?: string[] }) {
+export function List({ title, items }: { title: string; items?: string[] }) {
   if (!items?.length) return null;
   return (
     <div>
@@ -394,7 +394,7 @@ function RunSummary({ run }: { run: RunView }) {
       {run.workflow === "evening_checkin" && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <List title="Finished" items={s.done} />
-          <List title="Left for Sunday's review" items={s.partial} />
+          <List title="Left for the weekly review" items={s.partial} />
           <List title="Proposed for tomorrow" items={s.tomorrow?.proposed} />
           <List title="Already planned for tomorrow" items={s.tomorrow?.committed} />
         </div>

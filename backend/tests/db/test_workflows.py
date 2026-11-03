@@ -208,7 +208,7 @@ async def test_morning_trims_overloaded_day(session_factory):
     summary = view.summary
     assert summary["priorities"] == ["M0", "M1a", "M1b"]
     assert summary["execution"] == {"verified": 2}
-    assert "1 overdue tasks wait for Sunday's review (R6)." in summary["observations"]
+    assert "1 overdue tasks wait for the weekly review (R6)." in summary["observations"]
     assert "No scorecard for 30 Oct, 31 Oct, 01 Nov." in summary["observations"]
     moved = [p for p in pages_in(fake, "tasks").values() if p["title"] in ("M2", "M3")]
     assert all(p["due"] == date(2026, 11, 4) and p["week"] == [week] and p["month"] == [month]

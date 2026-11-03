@@ -176,6 +176,14 @@ An account's use of AI. The deployment owner uses the service's key: `GET /ai` r
 | --- | --- |
 | `GET /reports/usage?days=30` | From the account's own runs (1–365 days): `{days, totals, workflows: {name: summary}, by_day: {date: {runs, tokens}}, models}`; a summary is `{runs, statuses, success_rate, llm_calls, input_tokens, output_tokens, llm_latency_ms: {p50, p95}, duration_ms: {p50}}` |
 
+### Pages
+
+| Method and path | Description |
+| --- | --- |
+| `GET /goals` | `{available, tasks_linked, goals}`. Every goal with `state` (`active`, `planned`, `done`, `dropped` or null), `progress` (current ÷ target, 0–1, or null) and `open_tasks` linked to it; active goals first, then by deadline. `available` is false when the workspace has no goals |
+| `GET /reading` | `{available, books}`: the reading queue (books with a status) with `state` (`reading`, `want`, `finished`, `abandoned`) and `progress` (pages read ÷ pages); reading first, then by Up Next |
+| `GET /history?days=14` | Newest day first (1–90 days): `[{day, briefing, checkin}]`, each the latest run of that routine for the day as `{id, status, started_at, summary}` or null. A run belongs to the day its summary names, so a late check-in after midnight counts for the day it reviews |
+
 ### Schedule
 
 | Method and path | Description |

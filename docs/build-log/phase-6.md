@@ -51,6 +51,23 @@ Bugs the browser run found and fixed:
 Not yet verified on a device: the layout at phone width. It is built to stack on narrow
 screens (one column below the `lg` breakpoint, wrapping header, stacked decision rows).
 
+## More pages (2026-11-03)
+
+| Piece | Purpose |
+| --- | --- |
+| `app/api/pages.py` | `GET /goals` (progress, state, open tasks per goal), `GET /reading` (the queue with pages read), `GET /history` (each day's briefing and check-in); an unmapped module is reported as unavailable |
+| `/tasks` | The task views with a filter |
+| `/goals` | Goals and reading; a module the workspace doesn't map points to setup |
+| `/history` | Day by day, the morning plan beside the evening check-in, each openable in full |
+| Navigation | Seven pages; on a phone the menu takes its own row and scrolls sideways |
+| Wording | Overdue and unfinished tasks point to "the weekly review" rather than a weekday, and the Today card uses the workspace's own number of major tasks |
+| Demo | Some sample tasks are linked to goals, which now have success metrics |
+
+| Check | Result |
+| --- | --- |
+| Backend tests | 267 passed. New: goals ordered by state with capped progress and their open tasks in due order; the reading queue in progress first; unmapped modules; history pairing a day's runs, a late check-in counted for its own day, a waiting run dated by its start, other routines and accounts left out |
+| Browser | Tasks, Goals and History checked against the local demo at desktop width and at 390 px |
+
 ## Notes
 
 - `npm audit` reports 19 moderate and 2 low advisories, all from `minimatch` (via ESLint and the

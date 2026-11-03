@@ -27,6 +27,7 @@ from app.api.ai_routes import router as ai_router
 from app.api.cron import router as cron_router
 from app.api.errors import ApiError, error_body
 from app.api.notion_connect import router as notion_connect_router
+from app.api.pages import router as pages_router
 from app.api.reports import router as reports_router
 from app.api.routes import router
 from app.api.schedule_routes import router as schedule_router
@@ -245,6 +246,7 @@ def create_app(services: Services | None = None) -> FastAPI:
     app.include_router(ai_router, prefix="/api/v1")
     app.include_router(schedule_router, prefix="/api/v1")
     app.include_router(reports_router, prefix="/api/v1")
+    app.include_router(pages_router, prefix="/api/v1")
 
     @app.exception_handler(ApiError)
     async def _api_error(request: Request, exc: ApiError) -> JSONResponse:

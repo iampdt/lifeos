@@ -3,7 +3,7 @@
 load → ⏸ ask "what did you finish?" → parse → plan tomorrow → propose → ⏸ approve → execute
 → summarize
 
-Unfinished tasks are only noted for the Sunday review (R6); the nightly plan fills tomorrow's
+Unfinished tasks are only noted for the weekly review (R6); the nightly plan fills tomorrow's
 free major-task slots (R1) from undated or later tasks, never from overdue ones.
 """
 
@@ -243,7 +243,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
         name = lambda ids: [titles.get(i, i) for i in ids or []]  # noqa: E731
         notes = [n for n in [execution_note(state, deps.writes_enabled)] if n]
         if checkin.get("partial_ids"):
-            notes.append("Unfinished tasks stay where they are; decide on them on Sunday (R6).")
+            notes.append("Unfinished tasks stay where they are until the weekly review (R6).")
         summary = {
             "workflow": NAME,
             "day": state.get("today"),

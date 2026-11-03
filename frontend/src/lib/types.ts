@@ -271,3 +271,46 @@ export type UsageReport = {
   models: Record<string, number>;
 };
 
+
+export type GoalView = {
+  id: string;
+  url: string;
+  title: string;
+  type: string | null;
+  status: string | null;
+  state: "active" | "planned" | "done" | "dropped" | null;
+  area: string | null;
+  current: number | null;
+  target: number | null;
+  progress: number | null;
+  success_metric: string;
+  deadline: string | null;
+  open_tasks: { id: string; title: string; status: string | null; due: string | null; url: string }[];
+};
+
+export type GoalsView = { available: boolean; tasks_linked?: boolean; goals: GoalView[] };
+
+export type BookView = {
+  id: string;
+  url: string;
+  title: string;
+  author: string;
+  status: string | null;
+  state: "reading" | "want" | "finished" | "abandoned" | null;
+  pages: number | null;
+  pages_read: number | null;
+  progress: number | null;
+  started: string | null;
+  finished: string | null;
+};
+
+export type ReadingView = { available: boolean; books: BookView[] };
+
+export type HistoryRun = {
+  id: string;
+  status: string;
+  started_at: string;
+  summary: Record<string, unknown> | null;
+};
+
+export type HistoryDay = { day: string; briefing: HistoryRun | null; checkin: HistoryRun | null };

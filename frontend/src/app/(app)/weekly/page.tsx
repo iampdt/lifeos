@@ -44,7 +44,7 @@ export default function WeeklyReviewPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Reviews</h1>
         <p className="text-sm text-muted-foreground">
-          About 20 minutes on Sunday: see the week, decide every overdue task, triage the Inbox, close the week.
+          About 20 minutes once a week: see the week, decide every overdue task, triage the Inbox, close the week.
         </p>
       </div>
       {!run && (

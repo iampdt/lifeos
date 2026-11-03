@@ -14,7 +14,8 @@ import type { Task } from "@/lib/types";
 export function TodayCard() {
   const today = useQuery({ queryKey: ["tasks", "today"], queryFn: () => api<Task[]>("/tasks?view=today") });
   // "Today" comes from the backend, in the owner's timezone.
-  const now = useSettings().data?.today ?? "";
+  const settings = useSettings().data;
+  const now = settings?.today ?? "";
   const dueToday = today.data?.filter((t) => t.due === now) ?? [];
   const overdue = today.data?.filter((t) => t.due && t.due < now) ?? [];
   const major = dueToday.filter((t) => ["Next", "Doing"].includes(t.status ?? "") && !t.recurring).length;
@@ -24,8 +25,8 @@ export function TodayCard() {
       <CardHeader>
         <CardTitle>Today</CardTitle>
         <CardDescription>
-          {now ? formatDay(now, { weekday: "long", month: "long" }) : "Today"} · {major} of 3 major tasks
-          {overdue.length > 0 && ` · ${overdue.length} overdue, for Sunday's review`}
+          {now ? formatDay(now, { weekday: "long", month: "long" }) : "Today"} · {major} of {settings?.max_major_per_day ?? 3} major tasks
+          {overdue.length > 0 && ` · ${overdue.length} overdue, for the weekly review`}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-1">
@@ -52,7 +53,7 @@ export function TodayCard() {
 const rowClass = "group flex items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted";
 
 /** A task links to its Notion page when it has one (the demo workspace has none). */
-function TaskRow({ url, children }: { url: string; children: React.ReactNode }) {
+export function TaskRow({ url, children }: { url: string; children: React.ReactNode }) {
   if (!url) return <div className={rowClass}>{children}</div>;
   return (
     <a href={url} target="_blank" rel="noreferrer" className={rowClass}>

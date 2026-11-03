@@ -20,6 +20,9 @@ import type { SettingsView } from "@/lib/types";
 
 const NAV = [
   { href: "/", label: "Command Center" },
+  { href: "/tasks", label: "Tasks" },
+  { href: "/goals", label: "Goals" },
+  { href: "/history", label: "History" },
   { href: "/weekly", label: "Reviews" },
   { href: "/activity", label: "Activity" },
   { href: "/settings", label: "Settings" },
@@ -47,12 +50,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
           <Link href="/" className="font-semibold tracking-tight">LifeOS</Link>
-          <nav className="flex gap-1 text-sm">
+          <nav className="order-last -mx-2.5 flex w-[calc(100%+1.25rem)] gap-1 overflow-x-auto text-sm md:order-none md:mx-0 md:w-auto">
             {NAV.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`rounded-md px-2.5 py-1.5 transition-colors hover:bg-muted ${
+                className={`shrink-0 rounded-md px-2.5 py-1.5 whitespace-nowrap transition-colors hover:bg-muted ${
                   pathname === item.href ? "bg-muted font-medium" : "text-muted-foreground"
                 }`}
               >
