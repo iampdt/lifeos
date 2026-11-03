@@ -109,9 +109,9 @@ async def _tick(svc) -> dict[str, Any]:
 
     checked = 0
     if svc.connections is not None:
-        for user_id, is_owner, schedule in schedules:
+        for user_id, _, schedule, saved in schedules:
             day = now.astimezone(schedule.tz).date()
-            if is_owner or not await _claim(svc, user_id, "drift_check", day):
+            if not saved or not await _claim(svc, user_id, "drift_check", day):
                 continue
             try:
                 paused = await check_drift(svc.session_factory, svc.connections, user_id, svc.clock)
@@ -126,7 +126,7 @@ async def _tick(svc) -> dict[str, Any]:
     due = sorted(
         (
             (user_id, is_owner, d)
-            for user_id, is_owner, s in schedules
+            for user_id, is_owner, s, _ in schedules
             for d in due_routines(s, now)
         ),
         key=lambda item: item[2].since,
@@ -150,10 +150,12 @@ async def _tick(svc) -> dict[str, Any]:
             "ran": ran, "waiting": waiting}  # fmt: skip
 
 
-async def _schedules(svc) -> list[tuple[uuid.UUID, bool, Schedule]]:
-    """The owner's schedule (from settings) and every connected account's with a workspace."""
+async def _schedules(svc) -> list[tuple[uuid.UUID, bool, Schedule, bool]]:
+    """(account, is owner, schedule, saved workspace?) for every connected account with a saved
+    workspace, and for the owner: its saved workspace's schedule once it has moved to its own
+    connection, the settings' times on the environment's workspace until then."""
     s = svc.settings
-    out: list[tuple[uuid.UUID, bool, Schedule]] = []
+    out: list[tuple[uuid.UUID, bool, Schedule, bool]] = []
     async with svc.session_factory() as db:
         owner_id = await db.scalar(select(User.id).where(User.is_owner))
         rows = (
@@ -163,19 +165,17 @@ async def _schedules(svc) -> list[tuple[uuid.UUID, bool, Schedule]]:
                 .where(NotionConnection.status == "active")
             )
         ).all()
-    if owner_id is not None:
+    for row in rows:
+        out.append((row.user_id, row.user_id == owner_id, Schedule(
+            ZoneInfo(row.timezone), parse_time(row.morning_time), parse_time(row.evening_time),
+            row.review_weekday, parse_time(row.review_time), row.schedule_enabled,
+        ), True))  # fmt: skip
+    if owner_id is not None and all(user_id != owner_id for user_id, *_ in out):
         out.append((owner_id, True, Schedule(
             ZoneInfo(s.timezone), parse_time(s.lifeos_morning_time),
             parse_time(s.lifeos_evening_time), s.lifeos_review_weekday,
             parse_time(s.lifeos_review_time),
-        )))  # fmt: skip
-    for row in rows:
-        if row.user_id == owner_id:
-            continue
-        out.append((row.user_id, False, Schedule(
-            ZoneInfo(row.timezone), parse_time(row.morning_time), parse_time(row.evening_time),
-            row.review_weekday, parse_time(row.review_time), row.schedule_enabled,
-        )))  # fmt: skip
+        ), False))  # fmt: skip
     return out
 
 

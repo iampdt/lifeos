@@ -82,28 +82,12 @@ async def modules(principal: CurrentUser) -> dict[str, Any]:
 @router.get("/workspace")
 async def get_workspace(request: Request, principal: CurrentUser) -> dict[str, Any]:
     svc = services(request)
-    if principal.is_owner:
-        context = await svc.contexts.for_user(principal.user_id, is_owner=True)
-        specs = {n: s for n, s in context.deps.specs.items() if s.configured} if context else {}
-        return {
-            "source": "environment",
-            "editable": False,
-            "modules": mapping_json(specs),
-            "settings": {
-                "timezone": svc.settings.timezone,
-                "max_major_per_day": context.deps.rules.max_major_per_day if context else 3,
-                "review_weekday": svc.settings.lifeos_review_weekday,
-                "review_time": svc.settings.lifeos_review_time,
-                "morning_time": svc.settings.lifeos_morning_time,
-                "evening_time": svc.settings.lifeos_evening_time,
-                "schedule_enabled": True,
-            },
-            "paused": [],
-            "drift": None,
-            "checked_at": None,
-        }
     async with svc.session_factory() as db:
         row = await db.get(Workspace, principal.user_id)
+        connection = await db.get(NotionConnection, principal.user_id)
+    connected = connection is not None and connection.status == "active"
+    if principal.is_owner and row is None:
+        return _environment_view(svc, can_import=connected and svc.environment_specs is not None)
     return {
         "source": "account" if row else None,
         "editable": svc.connections is not None,
@@ -119,23 +103,38 @@ async def get_workspace(request: Request, principal: CurrentUser) -> dict[str, A
         "paused": list(row.paused_modules or []) if row else [],
         "drift": row.drift if row else None,
         "checked_at": row.checked_at.isoformat() if row and row.checked_at else None,
+        "can_import": False,
     }  # fmt: skip
+
+
+def _environment_settings(svc) -> WorkspaceSettings:
+    s = svc.settings
+    return WorkspaceSettings(
+        timezone=s.timezone, review_weekday=s.lifeos_review_weekday,
+        review_time=s.lifeos_review_time, morning_time=s.lifeos_morning_time,
+        evening_time=s.lifeos_evening_time,
+    )  # fmt: skip
+
+
+def _environment_view(svc, *, can_import: bool) -> dict[str, Any]:
+    """The owner's workspace from the environment (read-only here). `can_import` says whether
+    the owner's Notion connection could take it over."""
+    return {
+        "source": "environment" if svc.environment_specs else None,
+        "editable": False,
+        "modules": mapping_json(svc.environment_specs or {}),
+        "settings": _environment_settings(svc).model_dump(),
+        "paused": [],
+        "drift": None,
+        "checked_at": None,
+        "can_import": can_import,
+    }
 
 
 @router.put("/workspace")
 async def save_workspace(
     body: WorkspaceBody, request: Request, principal: CurrentUser
 ) -> dict[str, Any]:
-    svc = services(request)
-    if principal.is_owner:
-        raise ApiError(403, "environment_workspace", "this workspace is set in the environment")
-    if svc.connections is None:
-        raise ApiError(404, "http_error", "Not Found")
-    async with svc.session_factory() as db:
-        connection = await db.get(NotionConnection, principal.user_id)
-    if connection is None or connection.status != "active":
-        raise ApiError(409, "notion_reconnect", "connect Notion first")
-
     try:
         specs = specs_from_mapping(body.modules)
     except ValidationError as exc:
@@ -143,6 +142,31 @@ async def save_workspace(
         raise ApiError(
             422, "invalid_mapping", "the mapping is malformed", details=[problem]
         ) from exc
+    await _save(request, principal, specs, body.settings)
+    return await get_workspace(request, principal)
+
+
+@router.post("/workspace/import-environment")
+async def import_environment(request: Request, principal: CurrentUser) -> dict[str, Any]:
+    """The owner moves its environment workspace to its own Notion connection: the same mapping
+    and routine times, checked against what the connection can see. From then on the owner's
+    routines use the connection, and NOTION_TOKEN is no longer needed."""
+    svc = services(request)
+    if not principal.is_owner or svc.environment_specs is None:
+        raise ApiError(404, "http_error", "Not Found")
+    await _save(request, principal, dict(svc.environment_specs), _environment_settings(svc))
+    return await get_workspace(request, principal)
+
+
+async def _save(request: Request, principal, specs, settings: WorkspaceSettings) -> None:
+    """Check a mapping structurally and against the live data sources, then store it."""
+    svc = services(request)
+    if svc.connections is None:
+        raise ApiError(404, "http_error", "Not Found")
+    async with svc.session_factory() as db:
+        connection = await db.get(NotionConnection, principal.user_id)
+    if connection is None or connection.status != "active":
+        raise ApiError(409, "notion_reconnect", "connect Notion first")
     issues = validate_mapping(specs)
     if not issues:
         issues = await _live_issues(svc, principal.user_id, specs)
@@ -151,11 +175,10 @@ async def save_workspace(
             422, "invalid_mapping", "the mapping doesn't fit the workspace",
             details=[{"module": i.module, "field": i.field, "problem": i.problem} for i in issues],
         )  # fmt: skip
-
     values = {
         "user_id": principal.user_id,
         "mapping": mapping_json(specs),
-        **body.settings.model_dump(),
+        **settings.model_dump(),
         # Checked against the live workspace just now, so nothing is paused.
         "paused_modules": [],
         "drift": None,
@@ -169,7 +192,6 @@ async def save_workspace(
             )
         )  # fmt: skip
     await svc.contexts.forget(principal.user_id)
-    return await get_workspace(request, principal)
 
 
 # --- onboarding suggestions -------------------------------------------------------------------
@@ -179,8 +201,6 @@ MAX_SOURCES = 200
 
 async def _account_client(request: Request, principal):
     svc = services(request)
-    if principal.is_owner:
-        raise ApiError(403, "environment_workspace", "this workspace is set in the environment")
     if svc.connections is None:
         raise ApiError(404, "http_error", "Not Found")
     async with svc.session_factory() as db:

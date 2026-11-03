@@ -105,3 +105,23 @@ Design: [multi-user.md](../multi-user.md). This log grows with each step.
 | --- | --- |
 | Backend tests | 250 passed. New: due windows, local midnight, the review's weekday, other timezones and disabled schedules; a tick runs the owner's weekly review (Asia/Kolkata) and another account's morning briefing (New York) once each; the cap leaves the rest for the next tick; a failed run is retried by a later tick; accounts with routines off or a lost connection aren't scheduled; renaming properties in the (HTTP-backed) workspace pauses Habits while the rest keeps working, pausing Tasks removes the workspace, and saving the setup again restores it |
 
+## 9.7 Privacy, terms, the owner's move, rollout (2026-11-03)
+
+| Piece | Purpose |
+| --- | --- |
+| `/privacy`, `/terms` | Public pages written from what the code stores and sends; the contact from `LIFEOS_CONTACT_EMAIL`; linked from sign-in and every page |
+| `POST /workspace/import-environment` | The owner saves the environment's mapping and routine times as its account workspace, checked against its own connection |
+| Contexts | An account workspace takes precedence for the owner too, still on the deployment's AI key; `NOTION_TOKEN` is optional once Notion connections are configured |
+| Scheduling | A moved owner is scheduled from its saved times and gets the daily drift check |
+| Web app | Settings → Your Notion → **Move my routines to this connection**, with every problem listed if the connection can't see a database |
+| [deployment.md](../deployment.md) §10 | The rollout checklist: Google consent screen URLs, contact, Notion review answers, the owner's move, opening sign-up |
+
+| Check | Result |
+| --- | --- |
+| Backend tests | 253 passed. New: the owner moves from the environment's workspace to its connection (tasks then come through the connection, the settings say so, the AI key stays the deployment's, the tick schedules it from its saved times); moving is refused with the problem when the connection can't see a database, and nothing changes; only the owner can import |
+| Web app | Lint, types and build; `/privacy` and `/terms` prerendered |
+
+What remains needs the owner's accounts: the Google OAuth client, the Notion public connection
+and its review, the Render secrets (`GOOGLE_*`, `NOTION_OAUTH_*`, `LIFEOS_ENCRYPTION_KEY`,
+`LIFEOS_CONTACT_EMAIL`), the template page, the move, and `LIFEOS_OPEN_SIGNUP`.
+

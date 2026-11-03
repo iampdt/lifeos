@@ -104,4 +104,6 @@ replaced. Dates are when the decision was made.
 | I43 | Own keys | Checked with Google before saving (a refused key is a 400 naming the key, or 401/403; quota isn't the key's fault), stored encrypted, shown only as the last four characters |
 | I44 | Scheduling many accounts | One hourly signed tick instead of fixed per-routine schedules: routines are due for four hours in each account's timezone, the oldest run first up to a cap, and idempotency per account and local day makes late, retried or overlapping ticks harmless. Hourly keeps a private repository inside GitHub's free minutes |
 | I45 | Drift | Checked daily; a module that no longer matches is left out of the workspace (so nothing reads or writes it) until the mapping is saved again, rather than failing runs one by one |
+| I46 | The owner's move | An account workspace takes precedence over the environment's for the owner too, so moving is one saved mapping (the environment's, checked against the owner's connection) and `NOTION_TOKEN` can then go; the owner keeps the deployment's AI key |
+| I47 | Privacy and terms | Written from what the code stores and sends, not from a template; the AI section matches the consent disclosure |
 

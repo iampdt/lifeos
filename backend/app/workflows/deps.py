@@ -48,6 +48,8 @@ class WorkflowDeps:
     tz: ZoneInfo = DEFAULT_TZ
     clock: Callable[[], datetime] = utcnow
     rules: RuleSettings = field(default_factory=RuleSettings)
+    # "environment" (NOTION_TOKEN and the YAML mapping) or "account" (OAuth and a saved mapping).
+    workspace_source: str = "environment"
     workspace: NotionWorkspace = field(init=False)
     vocab: Vocabulary = field(init=False)
     scorecard: Scorecard = field(init=False)

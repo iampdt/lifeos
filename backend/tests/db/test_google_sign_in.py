@@ -256,7 +256,7 @@ async def test_an_email_linked_to_another_google_account_is_refused(env):
 
 async def test_password_sign_in_is_off_once_google_is_configured(env):
     meta = (await env.client.get("/api/v1/meta")).json()
-    assert meta == {"demo": False, "google": True, "password": False}
+    assert meta == {"demo": False, "google": True, "password": False, "contact": None}
     response = await env.client.post(
         "/api/v1/auth/login", json={"email": OWNER, "password": "a long test password"}
     )
@@ -272,4 +272,4 @@ async def test_google_routes_do_not_exist_without_configuration(session_factory)
         assert (await client.get("/api/v1/auth/google/start")).status_code == 404
         assert (await client.get("/api/v1/auth/google/callback")).status_code == 404
         meta = (await client.get("/api/v1/meta")).json()
-    assert meta == {"demo": False, "google": False, "password": True}
+    assert meta == {"demo": False, "google": False, "password": True, "contact": None}

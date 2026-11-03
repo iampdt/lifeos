@@ -42,7 +42,7 @@ from app.llm.router import LLMRouter
 from app.notion.client import NotionClient
 from app.notion.connections import NotionConnections, ReconnectNeeded
 from app.notion.errors import NotionError
-from app.notion.mapping import load_mapping
+from app.notion.mapping import DataSourceSpec, load_mapping
 from app.notion.oauth import NotionOAuth
 from app.notion.rate_limiter import AsyncTokenBucket
 from app.workflows.contexts import Contexts, UserContext
@@ -66,6 +66,8 @@ class Services:
     google: GoogleOIDC | None = None  # set when Google sign-in is configured
     connections: NotionConnections | None = None  # set when Notion OAuth is configured
     ai: AIAccessService | None = None  # accounts' AI access (not used by the owner or the demo)
+    # The environment's mapping (configured modules), which the owner can move to its account.
+    environment_specs: dict[str, DataSourceSpec] | None = None
 
     async def owner_context(self) -> UserContext | None:
         """The owner account's context: scheduled jobs and scripts act as the owner."""
@@ -100,17 +102,22 @@ async def build_demo_services(settings: Settings, stack: AsyncExitStack) -> Serv
 async def build_services(settings: Settings, stack: AsyncExitStack) -> Services:
     if settings.lifeos_demo_mode:
         return await build_demo_services(settings, stack)
-    if settings.notion_token is None:
-        raise RuntimeError("NOTION_TOKEN is not set")
-    client = await stack.enter_async_context(
-        NotionClient(
-            settings.notion_token.get_secret_value(),
-            base_url=settings.notion_base_url,
-            notion_version=settings.notion_version,
-            rate_limiter=AsyncTokenBucket(rate=settings.notion_requests_per_second),
+    # The environment's workspace (an internal integration) is optional once accounts, the
+    # owner included, can connect their own Notion.
+    if settings.notion_token is None and not settings.notion_oauth:
+        raise RuntimeError("set NOTION_TOKEN, or configure Notion connections (NOTION_OAUTH_*)")
+    client = None
+    if settings.notion_token is not None:
+        client = await stack.enter_async_context(
+            NotionClient(
+                settings.notion_token.get_secret_value(),
+                base_url=settings.notion_base_url,
+                notion_version=settings.notion_version,
+                rate_limiter=AsyncTokenBucket(rate=settings.notion_requests_per_second),
+            )
         )
-    )
     specs = load_mapping(settings.notion_mapping_path, env_values(), settings.notion_profile)
+    environment = client is not None and specs["tasks"].configured
     engine = make_engine(settings.database_url)
     stack.push_async_callback(engine.dispose)
     saver = await stack.enter_async_context(
@@ -133,15 +140,18 @@ async def build_services(settings: Settings, stack: AsyncExitStack) -> Services:
     accounts = None
     if connections is not None:
 
-        def account_deps(notion, account_specs, user_id, tz, rules) -> WorkflowDeps:
+        def account_deps(notion, account_specs, user_id, tz, rules, is_owner) -> WorkflowDeps:
+            # The owner uses the service's key directly; other accounts go through AI access.
+            model = llm if is_owner else AccountLLM(user_id, ai)
             return WorkflowDeps(
-                session_factory, notion, account_specs, AccountLLM(user_id, ai), user_id=user_id,
-                tz=tz, rules=rules, writes_enabled=settings.lifeos_writes_enabled,
+                session_factory, notion, account_specs, model, user_id=user_id, tz=tz,
+                rules=rules, writes_enabled=settings.lifeos_writes_enabled,
+                workspace_source="account",
             )  # fmt: skip
 
         accounts = AccountWorkspaces(session_factory, connections, account_deps)
     contexts = Contexts(
-        lambda user_id: make_deps(user_id=user_id),
+        lambda user_id: make_deps(user_id=user_id) if environment else None,
         saver,
         account_deps=accounts.deps_for if accounts else None,
     )
@@ -152,6 +162,7 @@ async def build_services(settings: Settings, stack: AsyncExitStack) -> Services:
         google=google_client(settings),
         connections=connections,
         ai=ai,
+        environment_specs={n: s for n, s in specs.items() if s.configured} if environment else None,
     )
 
 

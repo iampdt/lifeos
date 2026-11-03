@@ -36,9 +36,11 @@ def mapping_json(specs: dict[str, DataSourceSpec]) -> dict[str, Any]:
     }
 
 
-# Builds a WorkflowDeps for an account: (notion client, specs, user id, timezone, rules).
-DepsFactory = Callable[[NotionClient, dict[str, DataSourceSpec], uuid.UUID, ZoneInfo, RuleSettings],
-                       WorkflowDeps]  # fmt: skip
+# Builds a WorkflowDeps for an account: (notion client, specs, user id, timezone, rules, owner?).
+DepsFactory = Callable[
+    [NotionClient, dict[str, DataSourceSpec], uuid.UUID, ZoneInfo, RuleSettings, bool],
+    WorkflowDeps,
+]
 
 
 class AccountWorkspaces:
@@ -52,7 +54,7 @@ class AccountWorkspaces:
         self.connections = connections
         self.make_deps = make_deps
 
-    async def deps_for(self, user_id: uuid.UUID) -> WorkflowDeps | None:
+    async def deps_for(self, user_id: uuid.UUID, is_owner: bool = False) -> WorkflowDeps | None:
         """None until the account has connected Notion and saved a mapping. Modules the drift
         check paused are left out."""
         async with self.session_factory() as db:
@@ -70,4 +72,5 @@ class AccountWorkspaces:
             user_id,
             ZoneInfo(workspace.timezone),
             RuleSettings(max_major_per_day=workspace.max_major_per_day),
+            is_owner,
         )

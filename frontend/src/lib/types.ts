@@ -212,6 +212,8 @@ export type WorkspaceView = {
   paused: string[];
   drift: Record<string, string[]> | null;
   checked_at: string | null;
+  /** The owner only: its Notion connection could take over the environment's workspace. */
+  can_import: boolean;
 };
 export type WorkspaceSuggestion = {
   data_sources: { id: string; title: string }[];

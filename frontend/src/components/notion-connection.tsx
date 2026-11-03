@@ -3,15 +3,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api } from "@/lib/api";
-import type { DataSourceList, NotionConnectionView } from "@/lib/types";
+import { MODULE_LABELS, useWorkspace } from "@/components/workspace-notice";
+import { ApiError, api } from "@/lib/api";
+import type { DataSourceList, NotionConnectionView, WorkspaceView } from "@/lib/types";
 
 export function useNotionConnection() {
   return useQuery({
@@ -59,11 +60,7 @@ export function NotionConnectionCard({ owner }: { owner: boolean }) {
         <Suspense fallback={null}>
           <CallbackNotice />
         </Suspense>
-        {owner && (
-          <p className="text-muted-foreground">
-            Your routines still run on the workspace this deployment is configured with.
-          </p>
-        )}
+        {owner && <OwnerMove />}
         {active && <DataSources />}
         <div className="flex flex-wrap gap-2">
           {active && !owner && (
@@ -150,3 +147,46 @@ function DisconnectButton() {
     </Button>
   );
 }
+
+/** The owner: move the routines from the environment's workspace to this connection. */
+function OwnerMove() {
+  const client = useQueryClient();
+  const workspace = useWorkspace();
+  const [problems, setProblems] = useState<string[]>([]);
+  const move = useMutation({
+    mutationFn: () => api<WorkspaceView>("/workspace/import-environment", { method: "POST" }),
+    onSuccess: () => {
+      setProblems([]);
+      client.invalidateQueries();
+      toast.success("Your routines now run on this connection.");
+    },
+    onError: (error) => {
+      const details = error instanceof ApiError && Array.isArray(error.details) ? error.details : [];
+      setProblems(details.map((d: { module: string | null; problem: string }) =>
+        `${d.module ? `${MODULE_LABELS[d.module] ?? d.module}: ` : ""}${d.problem}`));
+      toast.error(error.message);
+    },
+  });
+  const view = workspace.data;
+  if (view?.source === "account") {
+    return <p className="text-muted-foreground">Your routines run on this connection.</p>;
+  }
+  return (
+    <div className="flex flex-col items-start gap-2">
+      <p className="text-muted-foreground">
+        Your routines still run on the workspace this deployment is configured with
+        (<span className="font-mono text-xs">NOTION_TOKEN</span>). Moving them keeps your setup and times; share
+        every database it uses on Notion&apos;s page first.
+      </p>
+      {view?.can_import && (
+        <Button variant="outline" onClick={() => move.mutate()} disabled={move.isPending}>
+          {move.isPending ? "Checking against Notion…" : "Move my routines to this connection"}
+        </Button>
+      )}
+      {problems.length > 0 && (
+        <ul className="list-disc pl-5 text-destructive">{problems.map((p) => <li key={p}>{p}</li>)}</ul>
+      )}
+    </div>
+  );
+}
+

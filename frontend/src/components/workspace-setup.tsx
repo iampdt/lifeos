@@ -89,7 +89,10 @@ export function WorkspaceSetup() {
       <Card>
         <CardHeader>
           <CardTitle>Workspace</CardTitle>
-          <CardDescription>This deployment&apos;s own workspace is configured on the server.</CardDescription>
+          <CardDescription>
+            This deployment&apos;s own workspace is configured on the server. To set it up here instead, connect
+            Notion and move your routines to the connection in Settings.
+          </CardDescription>
         </CardHeader>
       </Card>
     );

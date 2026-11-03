@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     # New accounts from Google sign-in. While off, Google sign-in only links to accounts that
     # already exist (matched by email).
     lifeos_open_signup: bool = False
+    # Shown on the privacy and terms pages as the way to reach whoever runs this deployment.
+    lifeos_contact_email: str | None = None
     # Connect Notion (a public integration with OAuth). Notion redirects to
     # {LIFEOS_PUBLIC_URL}/api/v1/notion/callback. Stored tokens are encrypted with
     # LIFEOS_ENCRYPTION_KEY: one or more comma-separated Fernet keys, the first one encrypting.

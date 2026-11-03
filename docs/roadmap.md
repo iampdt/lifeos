@@ -17,4 +17,4 @@ The MVP is Phases 3, 4, a minimal 6 and a minimal 8. Build notes for each finish
 | 6 (rest) | More pages: daily briefing history, goals, tasks, learning, monthly review, agent activity | Later |
 | 7 | Automation: editable permission modes and schedules; optional `auto` mode for allowlisted safe actions | Later |
 | 8b | Public demo on a sample workspace | ✅ live 2026-11-02 · [log](build-log/phase-8b.md) |
-| 9 | Multi-user: Google sign-in, Notion OAuth per user, generic workspace model, free-tier AI allowance plus own keys ([design](multi-user.md)) | In progress: 9.1–9.6 done · [log](build-log/phase-9.md) |
+| 9 | Multi-user: Google sign-in, Notion OAuth per user, generic workspace model, free-tier AI allowance plus own keys ([design](multi-user.md)) | ✅ built 2026-11-03; opening it waits on the owner's setup ([deployment.md](deployment.md) §10) · [log](build-log/phase-9.md) |

@@ -345,6 +345,7 @@ Productivity records stay in Notion. Postgres holds only state LifeOS owns. Migr
 | `/` Command Center | Today's tasks and major-task count, evening check-in and morning briefing, recent runs, streaming chat, approvals drawer |
 | `/weekly` | Weekly review: metrics, draft review, decisions, Inbox triage, the owner's note, approval |
 | `/settings` | Write switch, timezone, permission modes, model chains and tokens used, Notion connection and drift, account |
+| `/privacy`, `/terms` | Public privacy policy and terms of use |
 | `/setup` | Onboarding for an account's own workspace: a database per module, a property per field, status meanings, habits and metrics, rules |
 
 Approval cards show before → after for each kind. Selecting a move also selects the page it

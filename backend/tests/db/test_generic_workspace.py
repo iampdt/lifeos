@@ -34,6 +34,7 @@ from tests.workflow_support import (
     router,
     set_password,
 )
+from tests.workflow_support import SPECS as OWNER_SPECS
 
 NOW = datetime(2026, 11, 4, 14, 0, tzinfo=UTC)  # Wednesday evening in Asia/Kolkata
 TODAY = date(2026, 11, 4)
@@ -179,7 +180,7 @@ async def account(session_factory):
     await connections.save(user.id, TokenGrant.from_response(server._grant()))
     owner_services, _ = make_services(session_factory, FakeNotion(), MockLLM(), now=NOW)
 
-    def account_deps(notion, specs, user_id, tz, rules):
+    def account_deps(notion, specs, user_id, tz, rules, is_owner):
         return WorkflowDeps(session_factory, notion, specs, router(MockLLM()), writes_enabled=True,
                             user_id=user_id, tz=tz, rules=rules, clock=lambda: NOW)  # fmt: skip
 
@@ -258,16 +259,17 @@ async def test_a_mapping_that_doesnt_fit_is_refused_with_every_problem(account):
 async def test_the_owners_environment_workspace_is_read_only(session_factory):
     settings = Settings(_env_file=None, lifeos_api_token="tok")
     services, _ = make_services(
-        session_factory, FakeNotion(), MockLLM(), now=NOW, settings=settings
-    )
+        session_factory, FakeNotion(), MockLLM(), now=NOW, settings=settings,
+        environment_specs=OWNER_SPECS,
+    )  # fmt: skip
     transport = httpx.ASGITransport(app=create_app(services))
     auth = {"Authorization": "Bearer tok"}
     async with httpx.AsyncClient(transport=transport, base_url="https://t") as client:
         view = (await client.get("/api/v1/workspace", headers=auth)).json()
         assert view["source"] == "environment" and view["editable"] is False
-        assert "tasks" in view["modules"]
+        assert "tasks" in view["modules"] and view["can_import"] is False  # not connected
         refused = await client.put("/api/v1/workspace", json=BODY, headers=auth)
-        assert refused.status_code == 403
+        assert refused.status_code == 404  # this deployment has no Notion connections
         catalogue = (await client.get("/api/v1/workspace/modules", headers=auth)).json()
         assert catalogue["tasks"]["fields"]["status"]["needs"] == ["next", "done"]
     async with services.session_factory() as db:

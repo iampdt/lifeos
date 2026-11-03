@@ -56,6 +56,7 @@ async def test_visitors_get_a_session_without_a_password(client):
         "demo": True,
         "google": False,
         "password": False,
+        "contact": None,
     }
     assert (await c.get("/api/v1/tasks")).status_code == 401
     session = await c.post("/api/v1/auth/demo")

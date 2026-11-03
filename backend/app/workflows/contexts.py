@@ -1,9 +1,10 @@
 """Which workspace each account works on, and the runner that serves it.
 
-- The owner account (`User.is_owner`) uses the workspace configured in the environment. In the
-  public demo, the owner is the shared demo account.
-- Any other account gets one once it has connected its own Notion and saved a mapping
+- An account that has connected its own Notion and saved a mapping works on that
   (`app/workspaces/store.py`). Until then it can sign in but has no workspace.
+- The owner account (`User.is_owner`) works on the workspace configured in the environment
+  until it moves to its own connection the same way. In the public demo, the owner is the
+  shared demo account.
 
 Contexts are built on first use and cached; `forget` drops one after the account's connection
 or mapping changes.
@@ -31,10 +32,10 @@ class UserContext:
 class Contexts:
     def __init__(
         self,
-        owner_deps: Callable[[uuid.UUID], WorkflowDeps],
+        owner_deps: Callable[[uuid.UUID], WorkflowDeps | None],
         checkpointer: BaseCheckpointSaver,
         *,
-        account_deps: Callable[[uuid.UUID], Awaitable[WorkflowDeps | None]] | None = None,
+        account_deps: Callable[[uuid.UUID, bool], Awaitable[WorkflowDeps | None]] | None = None,
     ) -> None:
         self._owner_deps = owner_deps
         self._account_deps = account_deps
@@ -46,20 +47,18 @@ class Contexts:
         context = self._cache.get(user_id)
         if context is not None:
             return context
-        if is_owner:
+        deps = await self._account_deps(user_id, is_owner) if self._account_deps else None
+        own_client = deps is not None
+        if deps is None and is_owner:
             deps = self._owner_deps(user_id)
-        elif self._account_deps is not None:
-            deps = await self._account_deps(user_id)
-        else:
-            deps = None
         if deps is None:
             return None
-        context = UserContext(deps, WorkflowRunner(deps, self.checkpointer), not is_owner)
+        context = UserContext(deps, WorkflowRunner(deps, self.checkpointer), own_client)
         self._cache[user_id] = context
         return context
 
     async def forget(self, user_id: uuid.UUID) -> None:
         context = self._cache.pop(user_id, None)
         # The owner's client is shared by the deployment and stays open.
-        if context is not None and context.owns_client:
+        if context is not None and context.owns_client and hasattr(context.deps.notion, "aclose"):
             await context.deps.notion.aclose()

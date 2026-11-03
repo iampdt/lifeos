@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
@@ -17,7 +18,7 @@ type Meta = { demo: boolean; google: boolean; password: boolean };
 export default function LoginPage() {
   const meta = useQuery({ queryKey: ["meta"], queryFn: () => api<Meta>("/meta") });
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-10">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 py-10">
       {meta.isPending ? (
         <Skeleton className="h-64 w-full max-w-sm" />
       ) : meta.data?.demo ? (
@@ -29,6 +30,11 @@ export default function LoginPage() {
       ) : (
         <PasswordSignIn />
       )}
+      <p className="max-w-sm text-center text-xs text-muted-foreground">
+        By continuing you agree to the{" "}
+        <Link href="/terms" className="underline underline-offset-4">terms</Link> and the{" "}
+        <Link href="/privacy" className="underline underline-offset-4">privacy policy</Link>.
+      </p>
     </main>
   );
 }

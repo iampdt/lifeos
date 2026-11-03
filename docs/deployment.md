@@ -133,6 +133,28 @@ agreeing to the free-tier terms.
 From the next deploy, Settings shows **Your Notion** with **Connect Notion**. The owner's routines
 keep using the workspace configured by `NOTION_TOKEN`.
 
+### 10. Opening LifeOS to other people
+
+In this order, so each step works before the next depends on it:
+
+1. **Google sign-in** (§8). In the consent screen, set the app's home page to the web app's URL,
+   the privacy policy to `https://<your-app>.vercel.app/privacy` and the terms to `/terms`, then
+   publish it.
+2. **Contact address.** Set `LIFEOS_CONTACT_EMAIL` on Render; the privacy and terms pages show
+   it.
+3. **Notion connection** (§9), with the [starter template](template.md) if you offer one. The
+   review asks for the same three URLs, a support email (the contact address), a short
+   description ("runs daily and weekly routines on your Notion workspace and writes only the
+   changes you approve"), and why each capability is needed: read content for the routines,
+   update and insert content for the changes users approve; no comments or user information.
+4. **Your own move.** Sign in with Google, connect your Notion (share every database your
+   routines use), and choose Settings → Your Notion → **Move my routines to this connection**.
+   Your mapping and routine times carry over and are checked against what the connection can
+   see. Afterwards `NOTION_TOKEN` and the `NOTION_DS_*` variables can be removed from Render.
+5. **Open sign-up.** Set `LIFEOS_OPEN_SIGNUP` to `"true"` on Render. New Google accounts can then
+   sign in, connect Notion, set up their workspace and, after agreeing to the AI terms, use the
+   shared allowance or their own key.
+
 ## Public demo
 
 The Blueprint also defines `lifeos-demo-api`: the same image with `LIFEOS_DEMO_MODE=true`, an

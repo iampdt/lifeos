@@ -90,6 +90,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
         {noWorkspace && !["/settings", "/setup"].includes(pathname) ? <NoWorkspace /> : children}
       </main>
+      <footer className="mx-auto flex w-full max-w-6xl gap-3 px-4 pb-6 text-xs text-muted-foreground">
+        <Link href="/privacy" className="hover:text-foreground">Privacy</Link>
+        <Link href="/terms" className="hover:text-foreground">Terms</Link>
+      </footer>
     </div>
   );
 }

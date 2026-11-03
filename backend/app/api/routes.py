@@ -89,6 +89,7 @@ async def meta(request: Request) -> dict[str, Any]:
         "demo": settings.lifeos_demo_mode,
         "google": settings.google_sign_in,
         "password": settings.password_sign_in,
+        "contact": settings.lifeos_contact_email,
     }
 
 
@@ -448,6 +449,8 @@ async def get_settings_view(
         tokens_today = llm.tokens_spent_today()
     if svc.settings.lifeos_demo_mode:
         profile = "demo"
+    elif ctx.deps.workspace_source == "account":
+        profile = "account"
     elif principal.is_owner:
         profile = svc.settings.notion_profile  # live or sandbox: the environment's workspace
     else:

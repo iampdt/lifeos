@@ -17,7 +17,7 @@ export function useWorkspace() {
   return useQuery({
     queryKey: ["workspace"],
     queryFn: () => api<WorkspaceView>("/workspace"),
-    enabled: Boolean(session && !session.owner),
+    enabled: Boolean(session),
   });
 }
 

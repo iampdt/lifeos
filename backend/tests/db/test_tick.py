@@ -46,8 +46,8 @@ async def tick(session_factory):
         seed_task(fake, "Write tests", priority="P1", due=date(2026, 11, 8))
         return make_deps(session_factory, fake, None, now=NOW, user_id=user_id)
 
-    async def account_deps(user_id):
-        return deps_for(user_id)
+    async def account_deps(user_id, is_owner):
+        return None if is_owner else deps_for(user_id)  # the owner stays on the environment
 
     contexts = Contexts(deps_for, InMemorySaver(), account_deps=account_deps)
     settings = Settings(_env_file=None, lifeos_cron_secret=SECRET)

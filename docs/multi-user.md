@@ -142,8 +142,15 @@ minutes (each run bills at least a minute); with a public repository the schedul
 
 ## Privacy and setup
 
-- Privacy policy and terms pages describe what is stored (encrypted tokens, run and proposal
-  metadata, proposal payloads with task titles), the Gemini free-tier terms, and deletion.
+- Public **privacy** (`/privacy`) and **terms** (`/terms`) pages describe what is stored
+  (account, encrypted Notion tokens, setup, runs and their waiting state, proposals with task
+  titles, the activity log, AI settings), the Gemini free-tier terms, who else handles the data,
+  and deletion; the contact address comes from `LIFEOS_CONTACT_EMAIL`. The sign-in page links
+  both.
+- **The owner's move:** once the owner has connected its own Notion, one action saves the
+  environment's mapping and routine times as its account workspace, checked against what the
+  connection can see. From then on its routines run through the connection, still on the
+  deployment's own AI key, and `NOTION_TOKEN` becomes optional.
 - **Owner setup:** a Google Cloud OAuth client (web application; consent screen with the three
   basic scopes, published), a Notion public connection ("any workspace", redirect URI, template
   URL, submitted for review), and the new secrets on Render: `GOOGLE_CLIENT_ID`,
@@ -160,4 +167,4 @@ minutes (each run bills at least a minute); with a public repository the schedul
 | 9.4 | Generic workspace model: modules, mappings, onboarding UI, template, generic habits, per-user rules | Done |
 | 9.5 | AI allowance, own-key option, disclosure and consent | Done |
 | 9.6 | Per-user scheduling, daily drift check | Done |
-| 9.7 | Privacy and terms pages, Notion review submission, the owner's migration to the new flow, rollout | |
+| 9.7 | Privacy and terms pages, Notion review submission, the owner's migration to the new flow, rollout | Done in code; the owner's setup and the Notion review remain ([deployment.md](deployment.md) §10) |

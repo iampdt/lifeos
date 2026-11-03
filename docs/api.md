@@ -41,7 +41,7 @@ Every error has the same shape:
 | Method and path | Description |
 | --- | --- |
 | `GET /health` | Liveness, public |
-| `GET /meta` | Public: `{demo, google, password}`, so the sign-in page knows which sign-in to offer |
+| `GET /meta` | Public: `{demo, google, password, contact}`: which sign-in to offer, and the contact address for the privacy and terms pages |
 | `POST /auth/demo` | Demo deployments only (404 otherwise): a session on the shared demo account, no password. Returns `{email, csrf_token}` |
 | `GET /health/ready` | Database check; also returns the Notion profile, write switch and whether a model is configured |
 | `GET /auth/google/start` | Starts Google sign-in: records a single-use attempt (state, nonce, PKCE verifier; 10 minutes) and redirects to Google. 404 when Google isn't configured |
@@ -148,7 +148,8 @@ owner's workspace comes from the environment and is read-only here.
 | Method and path | Description |
 | --- | --- |
 | `GET /workspace/modules` | What each module needs: fields, allowed property types, required ones, and the meanings a status field must or may map (`needs`, `allows`) |
-| `GET /workspace` | `{source, editable, modules, settings, paused, drift, checked_at}`; `source` is `environment`, `account` or null (not set up yet); `paused` lists the modules the daily drift check left out, with the problems in `drift` |
+| `POST /workspace/import-environment` | The owner only: save the environment's mapping and routine times as its account workspace, checked against its own Notion connection (422 `invalid_mapping` with every problem, e.g. a database the connection can't see) |
+| `GET /workspace` | `{source, editable, modules, settings, paused, drift, checked_at, can_import}`; `can_import` tells the owner its connection could take over the environment's workspace; `source` is `environment`, `account` or null (not set up yet); `paused` lists the modules the daily drift check left out, with the problems in `drift` |
 | `GET /workspace/suggestion` | A first guess at the whole mapping: `{data_sources, modules, schemas, from_template}`, from the databases the connection can see (names and types only) |
 | `GET /workspace/data-sources/{id}?module=` | One database's properties (`schema`) and a guess at mapping the module onto it (`suggestion`); 404 `not_shared` when the connection can't see it |
 | `PUT /workspace` | Body `{modules, settings}`, with `settings` `{timezone, max_major_per_day, review_weekday, review_time, morning_time, evening_time, schedule_enabled}`. Checked structurally and then against the live data sources; problems come back as 422 `invalid_mapping` with every one in `error.details`. The owner's environment workspace answers 403 `environment_workspace` |
