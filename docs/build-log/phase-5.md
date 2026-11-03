@@ -61,3 +61,18 @@ Phase 5a (the evaluation set) is in [evals/](../evals/README.md). This log cover
 | --- | --- |
 | Backend tests | 286 passed. New: passages grouped under headings, long text split without loss, deep nesting and long pages cut and flagged, table rows; pages found, added, listed, removed; refresh rebuilds only after a change; duplicates refresh; the page limit; empty and unshared pages; cited answers (unknown reference dropped, repeats numbered once) with the usage report counting the run; keyword search and passages without AI; isolation between accounts; the read-only demo; chat's search and its linked sources; disconnecting Notion and deleting the account clear the index |
 | Live | `gemini-embedding-001` with the deployment's key: unit-length 768-dimension vectors in input order; a question about "stuck payments" ranks the outbox-worker passage first (cosine 0.69 against 0.53). In the local demo, a question returned a one-sentence answer citing the on-call passage, and chat answered from the reading notes |
+| Production | Migration 0013 created the `vector` extension on Neon. The public demo's three pages were indexed with embeddings, and a question about replication lag was answered by hybrid search with one citation to the reading notes |
+
+## Goals and reading in the weekly review (2026-11-03)
+
+| Piece | Purpose |
+| --- | --- |
+| `app/agents/goals.py` | Each active goal's standing from its numbers and linked tasks (target reached, behind, no next step, on pace, no target); the goal specialist's sentence per goal and one next task for a goal with none (at most three, none already a task); reading pace and a projected finish per book |
+| `goal.set_current` | A new action: a goal's progress figure, written only from what the owner typed |
+| Weekly review | Goals and reading in the decisions step; progress figures and kept next steps become proposals; the goal call runs alongside the review call |
+| Web app | Goals (status, facts, note, next step to keep or drop, progress) and Reading in the review; progress cards in approvals. After a gateway timeout the Reviews page keeps checking and offers to continue the run, which the server finishes anyway |
+
+| Check | Result |
+| --- | --- |
+| Backend tests | 291 passed. New: standing from numbers and tasks, including the facts line; reading pace and finish date; a full review where the model's notes reach the request, a next step is suggested only for the goal without a task (an unknown goal reference is dropped), a typed figure becomes `goal.set_current` with its before value, and both are written (the new task linked to its goal, in the Inbox); a declined step and a figure that isn't a number; facts alone without a model |
+| Browser | The local demo's review shows goals and reading. With Gemini's fast models failing (504, then 503), the goal notes fell back to the facts, the request timed out at the proxy, and the page offered to continue the finished run |

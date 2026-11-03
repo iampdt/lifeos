@@ -1,16 +1,19 @@
-"""Weekly review, MVP (architecture §5.3).
+"""Weekly review (architecture §5.3).
 
-load → draft (AI narrative + advice) → ⏸ decide (overdue queue and Inbox) → propose
-→ ⏸ approve → execute → summarize
+load → draft (AI narrative + advice, goal notes) → ⏸ decide (overdue queue, Inbox, goals)
+→ propose → ⏸ approve → execute → summarize
 
 The only place overdue tasks are moved (R6): each gets the owner's decision — carry forward
 (earliest day next week with a free slot, R1), reschedule to a date, cancel, or skip. Inbox
-items are kept, made Next, or cancelled (R11). The week is closed with its Review text and next
-week's page is created if missing. Goals are never changed.
+items are kept, made Next, or cancelled (R11). Each active goal shows where it stands; a goal
+with no open task gets a suggested next task (an Inbox task linked to it), and the owner may
+report new progress figures (`goal.set_current`). Books being read show their pace. The week
+is closed with its Review text and next week's page is created if missing.
 """
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import asdict
 from datetime import date, timedelta
 from typing import Any
@@ -18,8 +21,10 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
+from app.agents.goals import GoalHealth, advise_goals, goals_health, reading_pace
 from app.agents.reviewer import draft_review, render_review
-from app.execution.actions import ActionKind, ClosePeriod, SetStatus
+from app.domain.models import Goal
+from app.execution.actions import ActionKind, ClosePeriod, CreateTask, SetGoalCurrent, SetStatus
 from app.services.calendar import week_range, week_title
 from app.services.context import RefMap
 from app.services.rules import (
@@ -62,6 +67,11 @@ class WeeklyState(BaseState, total=False):
     week_page: dict[str, Any] | None
     review: dict[str, Any]
     choices: dict[str, Any]
+    goals: list[dict[str, Any]]  # active goals
+    goal_health: list[dict[str, Any]]
+    goal_refs: dict[str, str]
+    goal_advice: dict[str, Any]  # notes and suggested next steps, by goal id
+    reading: list[dict[str, Any]]
 
 
 def build_graph(deps: WorkflowDeps) -> StateGraph:
@@ -102,8 +112,20 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
             if pages:
                 week_page = {"id": pages[0].id, "review": pages[0].review}
         done = [t for t in in_week if vocab.status_key(t) == "done"]
+        goals = await ws.goals.active() if ws.goals else []
+        goal_refs = RefMap("G")
+        for goal in goals:
+            goal_refs.add(goal.id)
+        reading = []
+        if ws.books and ws.books.spec.has_value("status", "reading"):
+            name = ws.books.spec.prop("status").value("reading")
+            reading = [reading_pace(b, today) for b in await ws.books.queue() if b.status == name]
         return {
             "today": today.isoformat(),
+            "goals": [g.model_dump(mode="json") for g in goals],
+            "goal_health": [h.as_dict() for h in goals_health(goals, active, done, today)],
+            "goal_refs": goal_refs.ids,
+            "reading": reading,
             "week": {
                 "start": start.isoformat(),
                 "end": end.isoformat(),
@@ -125,21 +147,34 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
         tasks = {t.id: t for t in load_tasks(state["tasks"])}
         done = load_tasks(state["done_tasks"])
         queue = [tasks[i] for i in state["overdue_refs"].values()]
-        goals = await ws.goals.active() if ws.goals else []
-        result = await draft_review(
-            deps.llm,
-            week_label=state["week"]["label"],
-            metrics=_metrics_obj(state["metrics"]),
-            habits=HabitSummary.from_dict(state["habits"]["this_week"]),
-            previous_habits=HabitSummary.from_dict(state["habits"]["last_week"]),
-            scorecard=deps.scorecard,
-            done=done,
-            overdue=queue,
-            goals=goals,
-            memory=await deps.memory(),
+        goals = [Goal.model_validate(g) for g in state.get("goals") or []]
+        memory = await deps.memory()
+        health = [GoalHealth(**h) for h in state.get("goal_health") or []]
+        # Two independent model calls; together they take as long as the slower one.
+        result, advice = await asyncio.gather(
+            draft_review(
+                deps.llm,
+                week_label=state["week"]["label"],
+                metrics=_metrics_obj(state["metrics"]),
+                habits=HabitSummary.from_dict(state["habits"]["this_week"]),
+                previous_habits=HabitSummary.from_dict(state["habits"]["last_week"]),
+                scorecard=deps.scorecard,
+                done=done,
+                overdue=queue,
+                goals=goals,
+                memory=memory,
+            ),
+            advise_goals(
+                deps.llm, health, memory=memory, existing_titles=[t.title for t in tasks.values()]
+            ),
         )
         review = {k: v for k, v in result.as_dict().items() if k not in ("warnings", "usage")}
-        return {"review": review, "warnings": result.warnings, "llm": result.usage}
+        return {
+            "review": review,
+            "goal_advice": {"notes": advice.notes, "steps": advice.steps, "source": advice.source},
+            "warnings": result.warnings + advice.warnings,
+            "llm": result.usage + advice.usage,
+        }
 
     async def decide(state: WeeklyState) -> dict[str, Any]:
         tasks = {t.id: t for t in load_tasks(state["tasks"])}
@@ -170,11 +205,15 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
                     for ref, tid in state["overdue_refs"].items()
                 ],
                 "inbox": [row(ref, tid) for ref, tid in state["inbox_refs"].items()],
+                "goals": _goal_rows(state, deps.specs),
+                "reading": state.get("reading") or [],
                 "accepts": {
                     "accept": "true to take every recommendation (Inbox items are kept)",
                     "overdue": "{ref: {decision: carry_forward|reschedule|cancel|skip, "
                                "due?: YYYY-MM-DD}}",
                     "inbox": "{ref: {action: keep|next|cancel, due?: YYYY-MM-DD}}",
+                    "goals": "{ref: {current?: number, add_step?: bool}}; suggested next "
+                             "steps are added unless add_step is false",
                     "note": "optional; your own words, added to the week's Review",
                 },
             }
@@ -226,6 +265,23 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
                     reason="Inbox triage: planned.", rule_ids=("R11",),
                     title=state["titles"].get(task_id),
                 )  # fmt: skip
+        goal_titles = {g["id"]: g["title"] for g in state.get("goals") or []}
+        for goal_id, choice in (choices.get("goals") or {}).items():
+            if choice.get("current") is not None:
+                await builder.add(
+                    ActionKind.GOAL_SET_CURRENT,
+                    SetGoalCurrent(page_id=goal_id, current=choice["current"]),
+                    reason="The progress you reported in the weekly review.",
+                    title=goal_titles.get(goal_id),
+                )
+            if choice.get("step"):
+                await builder.add(
+                    ActionKind.TASK_CREATE,
+                    CreateTask(title=choice["step"], status="inbox", goal_ids=(goal_id,)),
+                    reason=f"A next step for “{goal_titles.get(goal_id, 'the goal')}”, which "
+                    "had no open task.",
+                    rule_ids=("R11",),
+                )
         page = state.get("week_page")
         weeks = deps.specs.get("weeks")
         can_close = weeks is not None and (
@@ -265,6 +321,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
         review = state.get("review") or {}
         choices = state.get("choices") or {"overdue": {}, "inbox": {}}
         decisions = state.get("decisions") or {}
+        goal_choices = (choices.get("goals") or {}).values()
         counted: dict[str, int] = {}
         for choice in choices["overdue"].values():
             counted[choice["decision"]] = counted.get(choice["decision"], 0) + 1
@@ -278,6 +335,10 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
             "inbox_decisions": {
                 a: sum(1 for c in choices["inbox"].values() if c["action"] == a)
                 for a in sorted(INBOX_CHOICES)
+            },
+            "goals": {
+                "progress_updates": sum(1 for c in goal_choices if c.get("current") is not None),
+                "next_steps": sum(1 for c in goal_choices if c.get("step")),
             },
             "proposals": {
                 "approved": len(decisions.get("approved") or []),
@@ -363,5 +424,56 @@ def _resolve_choices(
         if due is not None and due <= today:
             due = None
         inbox_choices[task_id] = {"action": action, "due": due.isoformat() if due else None}
+    goal_choices = _goal_choices(answer, state, warnings)
     note = str(answer.get("note") or "").strip()[:1000] or None
-    return {"overdue": overdue_choices, "inbox": inbox_choices, "note": note}, warnings
+    return (
+        {"overdue": overdue_choices, "inbox": inbox_choices, "goals": goal_choices, "note": note},
+        warnings,
+    )
+
+
+def _goal_rows(state: WeeklyState, specs: dict[str, Any]) -> list[dict[str, Any]]:
+    advice = state.get("goal_advice") or {}
+    health = {h["goal_id"]: h for h in state.get("goal_health") or []}
+    goals = specs.get("goals")
+    settable = goals is not None and goals.has("current")
+    rows = []
+    for ref, goal_id in (state.get("goal_refs") or {}).items():
+        item = health.get(goal_id) or {}
+        rows.append({
+            "ref": ref, "id": goal_id, "title": item.get("title"), "status": item.get("status"),
+            "facts": item.get("facts"), "progress": item.get("progress"),
+            "current": item.get("current"), "target": item.get("target"),
+            "open_tasks": len(item.get("open_tasks") or []),
+            "note": (advice.get("notes") or {}).get(goal_id, ""),
+            "next_step": (advice.get("steps") or {}).get(goal_id, ""),
+            "can_set_current": settable,
+        })  # fmt: skip
+    return rows
+
+
+def _goal_choices(answer: dict[str, Any], state: WeeklyState, warnings: list[str]) -> dict:
+    """New progress figures the owner typed, and which suggested next steps to add."""
+    given = answer.get("goals") if isinstance(answer.get("goals"), dict) else {}
+    steps = (state.get("goal_advice") or {}).get("steps") or {}
+    current = {g["id"]: g.get("current") for g in state.get("goals") or []}
+    choices: dict[str, dict[str, Any]] = {}
+    for ref, goal_id in (state.get("goal_refs") or {}).items():
+        choice = given.get(ref) if isinstance(given.get(ref), dict) else {}
+        value = choice.get("current")
+        number = None
+        if value is not None and value != "":
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                warnings.append(f"{ref}: {str(value)[:20]!r} isn't a number; progress unchanged.")
+            else:
+                if not 0 <= number <= 1_000_000_000:
+                    warnings.append(f"{ref}: progress must be zero or more; left unchanged.")
+                    number = None
+                elif number == current.get(goal_id):
+                    number = None  # unchanged
+        step = steps.get(goal_id) if choice.get("add_step", True) is not False else None
+        if number is not None or step:
+            choices[goal_id] = {"current": number, "step": step}
+    return choices

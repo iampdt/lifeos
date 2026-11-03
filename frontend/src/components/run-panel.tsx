@@ -181,6 +181,10 @@ export function DecisionsStep({ request, onAnswer }: { request: DecisionsRequest
     Object.fromEntries(request.inbox.map((r) => [r.ref, { action: "keep", due: "" }])),
   );
   const [note, setNote] = useState("");
+  const goals = request.goals ?? [];
+  const [goalChoices, setGoalChoices] = useState<Record<string, { current: string; addStep: boolean }>>(
+    Object.fromEntries(goals.map((g) => [g.ref, { current: "", addStep: true }])),
+  );
   const m = request.metrics;
   const review = request.review;
 
@@ -191,6 +195,11 @@ export function DecisionsStep({ request, onAnswer }: { request: DecisionsRequest
       ),
       inbox: Object.fromEntries(
         Object.entries(inbox).map(([ref, c]) => [ref, { action: c.action, ...(c.due ? { due: c.due } : {}) }]),
+      ),
+      goals: Object.fromEntries(
+        Object.entries(goalChoices).map(([ref, c]) => [
+          ref, { add_step: c.addStep, ...(c.current.trim() ? { current: c.current.trim() } : {}) },
+        ]),
       ),
       ...(note.trim() ? { note: note.trim() } : {}),
     });
@@ -275,6 +284,59 @@ export function DecisionsStep({ request, onAnswer }: { request: DecisionsRequest
         </section>
       )}
 
+      {goals.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h3 className="text-sm font-medium">Goals</h3>
+          {goals.map((goal) => {
+            const choice = goalChoices[goal.ref];
+            return (
+              <div key={goal.ref} className="flex flex-col gap-2 rounded-lg border p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="min-w-0 flex-1 truncate text-sm font-medium">{goal.title}</p>
+                  <Badge variant={goal.status === "behind" || goal.status === "no_next_step" ? "default" : "outline"}>
+                    {GOAL_STATUS[goal.status] ?? goal.status}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">{goal.facts}{goal.note ? ` ${goal.note}` : ""}</p>
+                {goal.next_step && (
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={choice.addStep}
+                      onCheckedChange={(checked) => setGoalChoices({ ...goalChoices, [goal.ref]: { ...choice, addStep: checked === true } })} />
+                    <span>Add a next step to the Inbox: <span className="font-medium">{goal.next_step}</span></span>
+                  </label>
+                )}
+                {goal.can_set_current && (
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    Progress now
+                    <Input type="number" min={0} step="any" inputMode="decimal" className="h-8 w-24"
+                      aria-label={`Progress for ${goal.title}`} placeholder={goal.current != null ? String(goal.current) : "—"}
+                      value={choice.current}
+                      onChange={(e) => setGoalChoices({ ...goalChoices, [goal.ref]: { ...choice, current: e.target.value } })} />
+                    {goal.target != null && <span>of {goal.target}</span>}
+                  </label>
+                )}
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      {(request.reading ?? []).length > 0 && (
+        <section className="flex flex-col gap-1">
+          <h3 className="text-sm font-medium">Reading</h3>
+          {request.reading!.map((book) => (
+            <p key={book.id} className="text-sm">
+              <span className="font-medium">{book.title}</span>
+              <span className="text-muted-foreground">
+                {book.pages ? ` · ${book.pages_read ?? 0} of ${book.pages} pages` : ""}
+                {book.pages_per_week ? ` · about ${book.pages_per_week} a week` : ""}
+                {book.finish ? `, done around ${formatDay(book.finish, { weekday: undefined })}` : ""}
+              </span>
+            </p>
+          ))}
+        </section>
+      )}
+
       <section className="flex flex-col gap-2">
         <Label htmlFor="review-note">Your note for the week (added to the Review in your words)</Label>
         <Textarea id="review-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
@@ -285,6 +347,14 @@ export function DecisionsStep({ request, onAnswer }: { request: DecisionsRequest
     </div>
   );
 }
+
+const GOAL_STATUS: Record<string, string> = {
+  done: "Target reached",
+  behind: "Behind",
+  no_next_step: "No next step",
+  on_pace: "On pace",
+  unmeasured: "No target",
+};
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (

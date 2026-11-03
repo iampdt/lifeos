@@ -90,6 +90,34 @@ export type DecisionsRequest = {
   review: ReviewDraft;
   overdue: OverdueRow[];
   inbox: { ref: string; id: string; title: string }[];
+  /** Absent in runs started before goals joined the review. */
+  goals?: GoalRow[];
+  reading?: ReadingPace[];
+};
+
+export type GoalRow = {
+  ref: string;
+  id: string;
+  title: string;
+  status: "done" | "behind" | "no_next_step" | "on_pace" | "unmeasured";
+  facts: string;
+  progress: number | null;
+  current: number | null;
+  target: number | null;
+  open_tasks: number;
+  note: string;
+  next_step: string;
+  can_set_current: boolean;
+};
+
+export type ReadingPace = {
+  id: string;
+  title: string;
+  author: string;
+  pages_read: number | null;
+  pages: number | null;
+  pages_per_week: number | null;
+  finish: string | null;
 };
 
 export type ApprovalRequest = {

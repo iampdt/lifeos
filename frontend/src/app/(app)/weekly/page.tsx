@@ -19,8 +19,11 @@ export default function WeeklyReviewPage() {
       const runs = await api<RunView[]>("/runs?limit=20");
       const waiting = (workflow: string) =>
         runs.find((r) => r.workflow === workflow && r.status.startsWith("waiting")) ?? null;
-      return { weekly: waiting("weekly_review"), monthly: waiting("monthly_review") };
+      const running = runs.some((r) => r.status === "running" && r.workflow.endsWith("_review"));
+      return { weekly: waiting("weekly_review"), monthly: waiting("monthly_review"), running };
     },
+    // A review still drafting (for example after a slow AI timed the request out) appears here.
+    refetchInterval: (query) => (query.state.data?.running ? 5000 : false),
   });
 
   async function continueRun(id: string) {

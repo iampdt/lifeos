@@ -32,6 +32,7 @@ class ActionKind(StrEnum):
     MONTH_CREATE = "month.create"
     MONTH_CLOSE = "month.close"
     BOOK_UPDATE_PROGRESS = "book.update_progress"
+    GOAL_SET_CURRENT = "goal.set_current"
 
 
 class Payload(BaseModel):
@@ -147,6 +148,14 @@ class UpdateBookProgress(Payload):
         return self
 
 
+class SetGoalCurrent(Payload):
+    """A goal's progress figure (`current`), as the owner reported it; the only goal field
+    LifeOS writes."""
+
+    page_id: str
+    current: float = Field(ge=0, le=1_000_000_000)
+
+
 PAYLOADS: dict[ActionKind, type[Payload]] = {
     ActionKind.TASK_MARK_DONE: MarkDone,
     ActionKind.TASK_SET_DUE: SetDue,
@@ -158,6 +167,7 @@ PAYLOADS: dict[ActionKind, type[Payload]] = {
     ActionKind.MONTH_CREATE: CreatePeriod,
     ActionKind.MONTH_CLOSE: ClosePeriod,
     ActionKind.BOOK_UPDATE_PROGRESS: UpdateBookProgress,
+    ActionKind.GOAL_SET_CURRENT: SetGoalCurrent,
 }
 
 DATA_SOURCE: dict[ActionKind, str] = {
@@ -171,6 +181,7 @@ DATA_SOURCE: dict[ActionKind, str] = {
     ActionKind.MONTH_CREATE: "months",
     ActionKind.MONTH_CLOSE: "months",
     ActionKind.BOOK_UPDATE_PROGRESS: "books",
+    ActionKind.GOAL_SET_CURRENT: "goals",
 }
 
 
@@ -303,6 +314,10 @@ def build_plan(
             if not values:
                 raise ValueError("this workspace's reading list has none of these fields")
             return WritePlan(source, payload.page_id, values)
+        case SetGoalCurrent():
+            if not spec.has("current"):
+                raise ValueError("this workspace's goals have no progress (current) field")
+            return WritePlan(source, payload.page_id, {"current": payload.current})
     raise ValueError(f"no plan for {kind}")  # pragma: no cover
 
 

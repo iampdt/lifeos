@@ -26,6 +26,7 @@ KIND_NAMES = {
     ActionKind.WEEK_CLOSE: "Closing the week", ActionKind.MONTH_CREATE: "New monthly page",
     ActionKind.MONTH_CLOSE: "Closing the month",
     ActionKind.BOOK_UPDATE_PROGRESS: "Reading progress",
+    ActionKind.GOAL_SET_CURRENT: "Goal progress",
 }  # fmt: skip
 
 

@@ -79,7 +79,7 @@ Answers by request type:
 | `waiting_for.type` | `answer` |
 | --- | --- |
 | `question` (evening check-in) | `{"text": "…"}` and/or structured fields: `done_refs`, `partial_refs`, `habits` (`{key: bool}`), `metrics` (`{key: number}`), `pages_read` (`[{ref, pages}]`), `learned`, `new_tasks`. The question lists the workspace's habits and metrics (`habits.fields`, `habits.metrics`) with their keys; it's `null` without a habits module. Structured fields win over what the model extracts |
-| `decisions` (weekly review) | `{"overdue": {"T1": {"decision": "carry_forward" \| "reschedule" \| "cancel" \| "skip", "due": "YYYY-MM-DD"}}, "inbox": {"I1": {"action": "keep" \| "next" \| "cancel", "due": "…"}}, "note": "…"}`. Anything omitted takes the recommendation (Inbox items are kept) |
+| `decisions` (weekly review) | `{"overdue": {"T1": {"decision": "carry_forward" \| "reschedule" \| "cancel" \| "skip", "due": "YYYY-MM-DD"}}, "inbox": {"I1": {"action": "keep" \| "next" \| "cancel", "due": "…"}}, "goals": {"G1": {"current": 4, "add_step": false}}, "note": "…"}`. Anything omitted takes the recommendation (Inbox items are kept, suggested next steps are added, progress is unchanged). The request lists `goals` (`{ref, id, title, status, facts, note, next_step, current, target, open_tasks, can_set_current}`) and `reading` (`{title, pages_read, pages, pages_per_week, finish}`) |
 | `month_review` (monthly review) | `{"note": "…"}` (optional), added to the month's Review |
 | `approval` | `{"approve": "all"}` or `{"approve": ["<proposal id>", …], "edits": {"<id>": {"new_due": "…"}}, "note": "…"}`. Everything not approved is rejected |
 

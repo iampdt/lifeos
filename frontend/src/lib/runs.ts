@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import type { RunView } from "@/lib/types";
 
 /** Holds one workflow run and advances it: start, then answer each pause. */
@@ -23,7 +23,15 @@ export function useRun(initial: RunView | null = null) {
       setRun(view);
       refresh();
     },
-    onError: (error) => toast.error(`Couldn't start: ${error.message}`),
+    onError: (error) => {
+      refresh();
+      // A gateway timeout means the server is still working: the run appears when it's ready.
+      toast.error(
+        error instanceof ApiError && [502, 504].includes(error.status)
+          ? "The AI is slow right now. The run keeps going; continue it from Recent runs in a minute."
+          : `Couldn't start: ${error.message}`,
+      );
+    },
   });
 
   const resume = useMutation({
@@ -33,7 +41,10 @@ export function useRun(initial: RunView | null = null) {
       setRun(view);
       refresh();
     },
-    onError: (error) => toast.error(`Couldn't continue: ${error.message}`),
+    onError: (error) => {
+      refresh();
+      toast.error(`Couldn't continue: ${error.message}`);
+    },
   });
 
   return { run, setRun, start, resume, pending: start.isPending || resume.isPending };

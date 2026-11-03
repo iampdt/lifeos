@@ -19,6 +19,7 @@ export const KIND_LABELS: Record<string, string> = {
   "month.create": "New month page",
   "month.close": "Close month",
   "book.update_progress": "Reading progress",
+  "goal.set_current": "Goal progress",
 };
 
 function Change({ from, to }: { from?: React.ReactNode; to: React.ReactNode }) {
@@ -98,6 +99,8 @@ function Details({ card }: { card: Card }) {
       );
     case "book.update_progress":
       return <Change from={str(before.pages_read)} to={`${str(p.pages_read)} pages read`} />;
+    case "goal.set_current":
+      return <Change from={str(before.current)} to={`progress ${str(p.current)}`} />;
     default:
       return <code className="text-xs">{JSON.stringify(p)}</code>;
   }

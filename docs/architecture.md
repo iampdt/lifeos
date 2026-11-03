@@ -168,13 +168,22 @@ without a scorecard.
 1. Load the week: tasks due in it, open tasks, the Inbox, habit rows, the Weekly Progress page.
 2. Compute R5 metrics and habit summaries for this week and last week, and suggest a carry-forward
    day for each overdue task (earliest day next week with a free slot).
+   Work out where each active goal stands (`agents/goals.py`): target reached, behind (progress
+   more than 10 points below the share of its time gone, given a start and a deadline), no next
+   step (no open task linked to it), on pace, or no target. Work out each book's pace since it
+   was started and the date it would be finished at that pace.
 3. The review specialist writes a summary, wins, misses, bottlenecks and up to 3 priorities,
-   and recommends carry forward or cancel for each overdue task.
+   and recommends carry forward or cancel for each overdue task. At the same time the goal
+   specialist writes a sentence per goal and, for a goal with no next step, suggests one
+   concrete task (at most three, none that already exists).
 4. **Pause** for decisions: per overdue task carry forward, reschedule, cancel or decide later;
-   per Inbox item keep, make Next or cancel; plus a note in the owner's words.
-5. Propose the decisions, `week.close` (the Review text is appended below anything already
-   there) and `week.create` for next week if missing.
-6. **Pause** for approval, then execute and summarise. Goals are never changed.
+   per Inbox item keep, make Next or cancel; per goal, a new progress figure and whether to add
+   its suggested next step; plus a note in the owner's words.
+5. Propose the decisions, `goal.set_current` for figures the owner gave, `task.create` (Inbox,
+   linked to the goal) for kept next steps, `week.close` (the Review text is appended below
+   anything already there) and `week.create` for next week if missing.
+6. **Pause** for approval, then execute and summarise. A goal's progress changes only from a
+   figure the owner typed; the model never sets it.
 
 ### 5.4 Monthly review
 
@@ -299,6 +308,7 @@ through that run; standalone proposals (from chat) through `/proposals/{id}/appr
 | `week.create` / `month.create` | New Weekly or Monthly Progress page |
 | `week.close` / `month.close` | Review text and Status Closed |
 | `book.update_progress` | Pages read, status, start and finish dates |
+| `goal.set_current` | A goal's progress figure, as the owner reported it in the weekly review |
 
 Payloads are Pydantic models with `extra="forbid"`; `build_plan` turns a payload into concrete
 field values.
@@ -474,7 +484,6 @@ a Notion account:
 
 ## 14. Planned
 
-- **Goal and learning specialists**, and an optional `goal.set_current` action.
 - **Quality bar:** more evaluation suites (weekly and monthly review, chat tool use).
 - **Multi-user:** sign-up, Notion OAuth per user, per-user data, onboarding from a Notion
   template, paid model and hosting tiers.
