@@ -99,7 +99,25 @@ export type ApprovalRequest = {
   writes_enabled: boolean;
 };
 
-export type WaitingFor = QuestionRequest | DecisionsRequest | ApprovalRequest;
+export type MonthReviewRequest = {
+  type: "month_review";
+  workflow: string;
+  month: { start: string; end: string; label: string; days: number };
+  metrics: WeekMetrics;
+  habits: { this_month: HabitSummary; last_month: HabitSummary };
+  review: {
+    summary?: string;
+    wins?: string[];
+    misses?: string[];
+    patterns?: string[];
+    focus?: string[];
+    source?: string;
+    goals: { title: string; note: string }[];
+  };
+  closes_page: boolean;
+};
+
+export type WaitingFor = QuestionRequest | DecisionsRequest | ApprovalRequest | MonthReviewRequest;
 
 export type RunView = {
   id: string;

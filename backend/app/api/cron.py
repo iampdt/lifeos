@@ -44,7 +44,9 @@ from app.workspaces.drift import check_drift
 logger = logging.getLogger("lifeos.cron")
 router = APIRouter()
 
-WORKFLOW_JOBS = frozenset({"morning_briefing", "evening_checkin", "weekly_review"})
+WORKFLOW_JOBS = frozenset(
+    {"morning_briefing", "evening_checkin", "weekly_review", "monthly_review"}
+)
 JOBS = WORKFLOW_JOBS | {"expire_proposals", "tick"}
 MAX_SKEW_SECONDS = 300
 

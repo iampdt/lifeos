@@ -128,7 +128,7 @@ Rules live in `services/rules.py` as pure functions. Their IDs appear in proposa
 | R7 | Moving a task moves its Week and Month links too | `task.set_due` names the target pages; a missing page becomes a `week.create` / `month.create` proposal that runs first |
 | R8 | Due decides the week and month | Monday–Sunday ISO weeks and calendar months in Asia/Kolkata (`services/calendar.py`), checked against the Notion Week Key formula on every dated task |
 | R9 | The weekly review takes 20–25 minutes | Everything is pre-computed; at most 15 overdue decisions per review |
-| R10 | The monthly review focuses on career growth | Monthly workflow scope (planned) |
+| R10 | The monthly review looks back at the whole month: tasks, scorecard, goals and the weekly reviews; it never changes tasks or goals | Monthly workflow scope |
 | R11 | The Inbox is triaged in the weekly review | Each item is kept, made Next (optionally with a date) or cancelled |
 | R12 | Reading notes stay in the owner's words | LifeOS never writes reading notes; check-in notes are the owner's text, appended |
 
@@ -176,7 +176,20 @@ without a scorecard.
    there) and `week.create` for next week if missing.
 6. **Pause** for approval, then execute and summarise. Goals are never changed.
 
-### 5.4 Chat
+### 5.4 Monthly review
+
+1. Load the month (last month in the first week of a month, as on the scheduled 1st; otherwise
+   the current one): tasks due in it, the scorecard against the month before, active goals with
+   progress, the month's weekly reviews and the monthly page.
+2. The monthly specialist (`agents/monthly.py`) writes a summary, wins, misses, patterns across
+   the weeks, up to 3 things to focus on next month, and a line per active goal. Without a model
+   the review comes from the numbers.
+3. **Pause** for the owner's note.
+4. Propose `month.close` (the Review text goes below anything already there) and `month.create`
+   for next month if missing, where the workspace has monthly pages.
+5. **Pause** for approval, then execute and summarise (R10).
+
+### 5.5 Chat
 
 A loop of structured steps: each model call returns one tool call or the final answer, with at
 most 6 steps and 90 s per turn. Read tools: today, overdue, next 7 days, Inbox, week summary,
@@ -184,7 +197,7 @@ goals, reading. Propose tools (mark done, reschedule, set status, create task) o
 pending proposals, and code checks every argument and R1 first. Answers stream to the browser as
 server-sent events.
 
-### 5.5 Without a model
+### 5.6 Without a model
 
 If every model fails or the daily token budget is spent:
 
@@ -194,7 +207,7 @@ If every model fails or the daily token budget is spent:
 
 Each fallback is named in the run's warnings. Chat reports that the AI is unavailable.
 
-### 5.6 Scheduling
+### 5.7 Scheduling
 
 Every hour GitHub Actions calls `POST /api/v1/internal/cron/tick` with an HMAC signature. The
 tick expires stale proposals, runs each account's daily drift check, and starts the routines due
@@ -205,6 +218,7 @@ in each account's own timezone (`workflows/schedule.py`):
 | `morning_briefing` | Daily, 07:30 |
 | `evening_checkin` | Daily, 21:00 (waits for the answer) |
 | `weekly_review` | Sundays, 18:00 (waits for decisions) |
+| `monthly_review` | The 1st, at the weekly review's time (waits for a note) |
 
 The owner's times come from settings (`LIFEOS_MORNING_TIME`, …) in `TIMEZONE`; every other
 account sets its own, or turns them off. A routine is due for four hours from its time, within
@@ -401,7 +415,6 @@ a Notion account:
 
 ## 14. Planned
 
-- **Monthly career review** (R10) with `month.close` and `month.create`.
 - **Memory:** long-term facts the owner can see and edit; a knowledge index over selected Notion
   pages (pgvector) with cited answers.
 - **Goal and learning specialists**, and an optional `goal.set_current` action.

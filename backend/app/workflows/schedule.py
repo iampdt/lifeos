@@ -1,7 +1,8 @@
 """When each account's routines are due (multi-user §Scheduling).
 
 Routines run in the account's own timezone: the morning briefing and the evening check-in every
-day, the weekly review on its weekday. A routine is due from its time until four hours later,
+day, the weekly review on its weekday, and the monthly review on the 1st (for the month just
+ended) at the weekly review's time. A routine is due from its time until four hours later,
 within the same local day, and runs at most once per account, routine and local date
 (`cron_runs`). The scheduled tick comes every hour, so the window also covers a late or
 missed tick.
@@ -47,6 +48,8 @@ def due_routines(schedule: Schedule, now: datetime) -> list[Due]:
     routines = [("morning_briefing", schedule.morning), ("evening_checkin", schedule.evening)]
     if today.weekday() == schedule.review_weekday:
         routines.append(("weekly_review", schedule.review))
+    if today.day == 1:
+        routines.append(("monthly_review", schedule.review))
     midnight = datetime.combine(today + timedelta(days=1), time(0), tzinfo=schedule.tz)
     due = []
     for job, at in routines:

@@ -21,7 +21,7 @@ from langgraph.types import Command
 from sqlalchemy import select, update
 
 from app.db.models import AgentRun
-from app.workflows import evening, morning, weekly
+from app.workflows import evening, monthly, morning, weekly
 from app.workflows.deps import WorkflowDeps
 
 logger = logging.getLogger("lifeos.workflows")
@@ -30,10 +30,12 @@ BUILDERS = {
     evening.NAME: evening.build_graph,
     morning.NAME: morning.build_graph,
     weekly.NAME: weekly.build_graph,
+    monthly.NAME: monthly.build_graph,
 }
 WAITING = {
     "question": "waiting_input",
     "decisions": "waiting_input",
+    "month_review": "waiting_input",
     "approval": "waiting_approval",
 }
 

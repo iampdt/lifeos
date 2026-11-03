@@ -17,7 +17,7 @@ on:
         description: Job to run now (the routines run for the owner)
         type: choice
         default: tick
-        options: [tick, morning_briefing, evening_checkin, weekly_review, expire_proposals]
+        options: [tick, morning_briefing, evening_checkin, weekly_review, monthly_review, expire_proposals]
 
 permissions:
   contents: read

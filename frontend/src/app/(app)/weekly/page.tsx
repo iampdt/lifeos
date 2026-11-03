@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { CalendarCheckIcon } from "lucide-react";
+import { CalendarCheckIcon, CalendarRangeIcon } from "lucide-react";
 
 import { RunPanel } from "@/components/run-panel";
 import { Button } from "@/components/ui/button";
@@ -14,10 +14,12 @@ import type { RunView } from "@/lib/types";
 export default function WeeklyReviewPage() {
   const { run, setRun, start, resume, pending } = useRun();
   const open = useQuery({
-    queryKey: ["runs", "weekly-open"],
+    queryKey: ["runs", "reviews-open"],
     queryFn: async () => {
       const runs = await api<RunView[]>("/runs?limit=20");
-      return runs.find((r) => r.workflow === "weekly_review" && r.status.startsWith("waiting")) ?? null;
+      const waiting = (workflow: string) =>
+        runs.find((r) => r.workflow === workflow && r.status.startsWith("waiting")) ?? null;
+      return { weekly: waiting("weekly_review"), monthly: waiting("monthly_review") };
     },
   });
 
@@ -29,14 +31,18 @@ export default function WeeklyReviewPage() {
   const title =
     request?.type === "decisions"
       ? `Week of ${request.week.label}`
-      : request?.type === "approval"
-        ? "Confirm the changes"
-        : "Weekly review";
+      : request?.type === "month_review"
+        ? request.month.label
+        : request?.type === "approval"
+          ? "Confirm the changes"
+          : run?.workflow === "monthly_review"
+            ? "Monthly review"
+            : "Weekly review";
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Weekly review</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Reviews</h1>
         <p className="text-sm text-muted-foreground">
           About 20 minutes on Sunday: see the week, decide every overdue task, triage the Inbox, close the week.
         </p>
@@ -54,9 +60,30 @@ export default function WeeklyReviewPage() {
             <Button onClick={() => start.mutate({ workflow: "weekly_review" })} disabled={pending}>
               <CalendarCheckIcon /> Start this week&apos;s review
             </Button>
-            {open.data && (
-              <Button variant="outline" onClick={() => continueRun(open.data!.id)}>
-                Continue the review started {formatTime(open.data.started_at)}
+            {open.data?.weekly && (
+              <Button variant="outline" onClick={() => continueRun(open.data!.weekly!.id)}>
+                Continue the review started {formatTime(open.data.weekly.started_at)}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+      {!run && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Monthly review</CardTitle>
+            <CardDescription>
+              Early in a month it looks back at the month before: tasks, scorecard, goals and the weekly reviews.
+              LifeOS drafts it, you add a note, and it closes the month&apos;s page and prepares the next.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => start.mutate({ workflow: "monthly_review" })} disabled={pending}>
+              <CalendarRangeIcon /> Start the monthly review
+            </Button>
+            {open.data?.monthly && (
+              <Button variant="outline" onClick={() => continueRun(open.data!.monthly!.id)}>
+                Continue the review started {formatTime(open.data.monthly.started_at)}
               </Button>
             )}
           </CardContent>

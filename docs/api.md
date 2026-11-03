@@ -55,7 +55,7 @@ Every error has the same shape:
 
 | Method and path | Description |
 | --- | --- |
-| `POST /workflows/{name}/runs` | Start `evening_checkin`, `morning_briefing` or `weekly_review`. Body `{inputs?}`. Returns a run (201) |
+| `POST /workflows/{name}/runs` | Start `evening_checkin`, `morning_briefing`, `weekly_review` or `monthly_review`. Body `{inputs?}`. Returns a run (201) |
 | `GET /runs?status=&limit=` | Recent runs, newest first (without request or summary bodies) |
 | `GET /runs/{id}` | One run |
 | `POST /runs/{id}/resume` | Body `{answer}`: the reply to the run's `waiting_for` request |
@@ -80,11 +80,13 @@ Answers by request type:
 | --- | --- |
 | `question` (evening check-in) | `{"text": "…"}` and/or structured fields: `done_refs`, `partial_refs`, `habits` (`{key: bool}`), `metrics` (`{key: number}`), `pages_read` (`[{ref, pages}]`), `learned`, `new_tasks`. The question lists the workspace's habits and metrics (`habits.fields`, `habits.metrics`) with their keys; it's `null` without a habits module. Structured fields win over what the model extracts |
 | `decisions` (weekly review) | `{"overdue": {"T1": {"decision": "carry_forward" \| "reschedule" \| "cancel" \| "skip", "due": "YYYY-MM-DD"}}, "inbox": {"I1": {"action": "keep" \| "next" \| "cancel", "due": "…"}}, "note": "…"}`. Anything omitted takes the recommendation (Inbox items are kept) |
+| `month_review` (monthly review) | `{"note": "…"}` (optional), added to the month's Review |
 | `approval` | `{"approve": "all"}` or `{"approve": ["<proposal id>", …], "edits": {"<id>": {"new_due": "…"}}, "note": "…"}`. Everything not approved is rejected |
 
 Workflow inputs: `evening_checkin` takes `plan_tomorrow` (default `true`); `morning_briefing`
 takes `plan_if_empty` (default `true`); `weekly_review` takes `week_of` (a date in the week to
-review; default today).
+review; default today); `monthly_review` takes `month_of` (a date in the month; default last
+month during the first week of a month, otherwise this month).
 
 ### Approvals and proposals
 
@@ -189,8 +191,8 @@ Notion public integration configured; otherwise these routes return 404 and
 
 ### Scheduled jobs
 
-`POST /internal/cron/{job}` for `tick`, `morning_briefing`, `evening_checkin`, `weekly_review`
-and `expire_proposals`, with headers:
+`POST /internal/cron/{job}` for `tick`, `morning_briefing`, `evening_checkin`, `weekly_review`,
+`monthly_review` and `expire_proposals`, with headers:
 
 ```
 X-LifeOS-Timestamp: <unix seconds>

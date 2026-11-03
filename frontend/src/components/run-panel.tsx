@@ -12,7 +12,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDay, humanize } from "@/lib/format";
 import { nativeSelect } from "@/lib/styles";
-import type { ApprovalRequest, DecisionsRequest, QuestionRequest, RunView } from "@/lib/types";
+import type {
+  ApprovalRequest,
+  DecisionsRequest,
+  MonthReviewRequest,
+  QuestionRequest,
+  RunView,
+} from "@/lib/types";
 
 type Props = { run: RunView; pending: boolean; onAnswer: (answer: unknown) => void };
 
@@ -30,6 +36,7 @@ export function RunPanel({ run, pending, onAnswer }: Props) {
     if (request.type === "question") return <QuestionStep request={request} onAnswer={onAnswer} />;
     if (request.type === "decisions") return <DecisionsStep request={request} onAnswer={onAnswer} />;
     if (request.type === "approval") return <ApprovalStep request={request} onAnswer={onAnswer} />;
+    if (request.type === "month_review") return <MonthStep request={request} onAnswer={onAnswer} />;
   }
   if (run.status === "completed") return <RunSummary run={run} />;
   return <Working />;
@@ -419,3 +426,50 @@ function RunSummary({ run }: { run: RunView }) {
     </div>
   );
 }
+
+// --- monthly review ------------------------------------------------------------------------
+
+function MonthStep({ request, onAnswer }: { request: MonthReviewRequest; onAnswer: (a: unknown) => void }) {
+  const [note, setNote] = useState("");
+  const m = request.metrics;
+  const review = request.review;
+  return (
+    <div className="flex flex-col gap-6">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat label="Done" value={`${m.done} / ${m.planned}`} hint={m.completion_rate != null ? `${Math.round(m.completion_rate * 100)}%` : undefined} />
+        <Stat label="Still open" value={String(m.still_open)} />
+        <Stat label="Cancelled" value={String(m.cancelled)} />
+        <Stat label="Scorecard days" value={`${request.habits.this_month.days_logged} / ${request.month.days}`}
+          hint={`last month ${request.habits.last_month.days_logged}`} />
+      </section>
+      <section className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-medium">Review</h3>
+          <Badge variant="outline">{review.source === "ai" ? "AI draft" : "From the numbers"}</Badge>
+        </div>
+        <p className="text-sm">{review.summary}</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <List title="Wins" items={review.wins} />
+          <List title="Missed" items={review.misses} />
+          <List title="Patterns" items={review.patterns} />
+          <List title="Next month" items={review.focus} />
+          <List title="Goals" items={review.goals.map((g) => `${g.title}: ${g.note}`)} />
+        </div>
+      </section>
+      <section className="flex flex-col gap-2">
+        <Label htmlFor="month-note">Your note (optional)</Label>
+        <Textarea id="month-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)}
+          placeholder="What you want to remember about this month, in your own words." />
+        <p className="text-xs text-muted-foreground">
+          {request.closes_page
+            ? "The review and your note are written to the month's page once you approve."
+            : "This workspace has no monthly page to write to; the review stays in LifeOS."}
+        </p>
+      </section>
+      <div className="flex justify-end">
+        <Button onClick={() => onAnswer(note.trim() ? { note: note.trim() } : {})}>Continue</Button>
+      </div>
+    </div>
+  );
+}
+

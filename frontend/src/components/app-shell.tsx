@@ -20,7 +20,7 @@ import type { SettingsView } from "@/lib/types";
 
 const NAV = [
   { href: "/", label: "Command Center" },
-  { href: "/weekly", label: "Weekly review" },
+  { href: "/weekly", label: "Reviews" },
   { href: "/settings", label: "Settings" },
 ];
 

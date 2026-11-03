@@ -23,6 +23,7 @@ export const WORKFLOW_LABELS: Record<string, string> = {
   evening_checkin: "Evening check-in",
   morning_briefing: "Morning briefing",
   weekly_review: "Weekly review",
+  monthly_review: "Monthly review",
   chat: "Chat",
 };
 

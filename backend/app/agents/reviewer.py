@@ -87,9 +87,9 @@ def metrics_line(metrics: WeekMetrics) -> str:
     )
 
 
-def habits_line(habits: HabitSummary, scorecard: Scorecard) -> str:
+def habits_line(habits: HabitSummary, scorecard: Scorecard, days: int = 7) -> str:
     checks = ", ".join(f"{scorecard.habit_name(k)} {v}" for k, v in habits.checks.items()) or "none"
-    parts = [f"{habits.days_logged} of 7 days logged; checks: {checks}"]
+    parts = [f"{habits.days_logged} of {days} days logged; checks: {checks}"]
     parts += [f"avg {scorecard.metric(k).label(v)}" for k, v in habits.averages.items()]
     return "; ".join(parts) + "."
 
