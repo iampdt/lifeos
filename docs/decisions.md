@@ -106,4 +106,5 @@ replaced. Dates are when the decision was made.
 | I45 | Drift | Checked daily; a module that no longer matches is left out of the workspace (so nothing reads or writes it) until the mapping is saved again, rather than failing runs one by one |
 | I46 | The owner's move | An account workspace takes precedence over the environment's for the owner too, so moving is one saved mapping (the environment's, checked against the owner's connection) and `NOTION_TOKEN` can then go; the owner keeps the deployment's AI key |
 | I47 | Privacy and terms | Written from what the code stores and sends, not from a template; the AI section matches the consent disclosure |
+| I48 | Late schedules | Opening the app starts the account's due routines that haven't run, claimed like the tick's, because GitHub's schedules ran up to 8 hours late; the tick stays the source of truth for accounts that don't open the app |
 

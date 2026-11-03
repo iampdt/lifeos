@@ -125,3 +125,11 @@ What remains needs the owner's accounts: the Google OAuth client, the Notion pub
 and its review, the Render secrets (`GOOGLE_*`, `NOTION_OAUTH_*`, `LIFEOS_ENCRYPTION_KEY`,
 `LIFEOS_CONTACT_EMAIL`), the template page, the move, and `LIFEOS_OPEN_SIGNUP`.
 
+### Follow-ups the same day
+
+| Change | Why |
+| --- | --- |
+| `POST /schedule/catch-up`, called by the web app on load | GitHub ran the old fixed schedules 7–8 hours late on 2 November; the new hourly tick's first run was also late. Opening the app now starts due routines that haven't run, without running anything twice (tests: the owner's visit starts its review and the late tick skips it; another account's visit starts only its own routine; the demo has none) |
+| Scorecard cards carry the workspace's names and units | The web app had kept a table of one setup's habit names; it now shows whatever the workspace calls them |
+| Wording | The site description and a settings comment no longer name one particular Notion setup |
+

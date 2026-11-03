@@ -102,6 +102,8 @@ async def test_workflows_run_on_the_sample_workspace_and_reset_restores_it(clien
         "/api/v1/account/delete", json={"confirm": "demo@example.com"}, headers=headers
     )
     assert deleted.status_code == 403 and deleted.json()["error"]["code"] == "demo_account"
+    catch_up = await c.post("/api/v1/schedule/catch-up", headers=headers)
+    assert catch_up.status_code == 404  # the demo has no schedule
 
 
 async def test_demo_endpoints_do_not_exist_outside_demo_mode(session_factory):

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { ApprovalsSheet } from "@/components/approvals-sheet";
+import { useCatchUp } from "@/components/catch-up";
 import { DemoBanner } from "@/components/demo-banner";
 import { useSession, useSignOut } from "@/components/session";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const signOut = useSignOut();
   const settings = useSettings();
   const noWorkspace = session?.workspace === false;
+  useCatchUp(Boolean(session?.workspace && settings.data && !settings.data.demo));
 
   return (
     <div className="flex min-h-screen flex-col">

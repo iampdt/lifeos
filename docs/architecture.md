@@ -210,7 +210,9 @@ The owner's times come from settings (`LIFEOS_MORNING_TIME`, …) in `TIMEZONE`;
 account sets its own, or turns them off. A routine is due for four hours from its time, within
 the same local day, and runs at most once per account and local date (`cron_runs`); the oldest
 due routines run first, up to `LIFEOS_TICK_MAX_RUNS` per tick, and the rest wait for the next
-tick. A failed run frees its slot so a later tick retries it.
+tick. A failed run frees its slot so a later tick retries it. Because scheduled runs can arrive
+hours late, the web app also asks on load (`POST /schedule/catch-up`) for the account's due
+routines, which start then if they haven't yet.
 
 ## 6. Actions, approvals and permissions
 

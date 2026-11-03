@@ -26,19 +26,9 @@ export const WORKFLOW_LABELS: Record<string, string> = {
   chat: "Chat",
 };
 
-export const HABIT_LABELS: Record<string, string> = {
-  woke_on_time: "Woke on time",
-  dsa: "DSA",
-  deep_work: "Deep work",
-  technical_learning: "Technical learning",
-  workout: "Workout",
-  protein_target: "Protein target",
-  reading: "Reading",
-  speech_practice: "Speech practice",
-  daily_highlight: "Daily highlight",
-};
-
+/** A key like `carry_forward` as words ("Carry forward"). Habit and metric names come from the
+ * workspace instead (a scorecard card's `labels`). */
 export function humanize(key: string) {
-  const text = HABIT_LABELS[key] ?? key.replaceAll("_", " ");
+  const text = key.replaceAll("_", " ");
   return text.charAt(0).toUpperCase() + text.slice(1);
 }

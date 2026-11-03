@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # Notion documents an average of 3 requests/second per connection; stay below it.
     notion_requests_per_second: float = 2.5
     notion_mapping_path: Path = BACKEND_ROOT / "config" / "notion_mapping.yaml"
-    # Which set of data sources to use: the real Life OS ("live") or the test copies ("sandbox").
+    # The environment's workspace: the real data sources ("live") or test copies ("sandbox").
     notion_profile: str = "live"
     timezone: str = "Asia/Kolkata"
 

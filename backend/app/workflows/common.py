@@ -95,9 +95,19 @@ async def proposal_cards(
                 "rule_ids": list(row.rule_ids or []),
                 "depends_on": [str(d) for d in row.depends_on or []],
                 "expires_at": row.expires_at.isoformat(),
+                **(_scorecard_labels(deps) if row.kind == "habit.upsert_day" else {}),
             }
         )
     return cards
+
+
+def _scorecard_labels(deps: WorkflowDeps) -> dict[str, Any]:
+    """Display names (and metric units) for a scorecard proposal's mapping keys."""
+    card = deps.scorecard
+    return {
+        "labels": {h.key: h.name for h in card.habits} | {m.key: m.name for m in card.metrics},
+        "units": {m.key: m.unit for m in card.metrics if m.unit},
+    }
 
 
 async def apply_decisions(

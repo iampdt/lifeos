@@ -140,6 +140,10 @@ Hourly rather than every 30 minutes keeps a private repository inside GitHub's f
 minutes (each run bills at least a minute); with a public repository the schedule can be
 `0,30 * * * *`.
 
+GitHub runs schedules late at times (7–8 hours on 2 November 2026), so opening the app also
+catches up: the web app asks for any of the account's routines that are due but haven't run,
+and they start then, claimed the same way as by the tick.
+
 ## Privacy and setup
 
 - Public **privacy** (`/privacy`) and **terms** (`/terms`) pages describe what is stored

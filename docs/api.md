@@ -167,6 +167,12 @@ An account's use of AI. The deployment owner uses the service's key: `GET /ai` r
 | `PUT /ai/key` | Body `{key}`. Browser sessions only. Checked with Google, then stored encrypted. 422 `key_rejected`, 503 `key_check_failed` (retryable), 404 `own_keys_unavailable` without `LIFEOS_ENCRYPTION_KEY` |
 | `DELETE /ai/key` | Remove the stored key |
 
+### Schedule
+
+| Method and path | Description |
+| --- | --- |
+| `POST /schedule/catch-up` | Starts the caller's routines that are due but haven't run today (at most two), claimed like the tick's; the web app calls it on load. `{started: [{job, status, run_id}]}`. 404 in the demo |
+
 ### Notion connection
 
 An account's own Notion workspace, connected with OAuth. Available when the deployment has a

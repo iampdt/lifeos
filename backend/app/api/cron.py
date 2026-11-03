@@ -150,21 +150,27 @@ async def _tick(svc) -> dict[str, Any]:
             "ran": ran, "waiting": waiting}  # fmt: skip
 
 
-async def _schedules(svc) -> list[tuple[uuid.UUID, bool, Schedule, bool]]:
+async def _schedules(
+    svc, user_id: uuid.UUID | None = None
+) -> list[tuple[uuid.UUID, bool, Schedule, bool]]:
     """(account, is owner, schedule, saved workspace?) for every connected account with a saved
     workspace, and for the owner: its saved workspace's schedule once it has moved to its own
-    connection, the settings' times on the environment's workspace until then."""
+    connection, the settings' times on the environment's workspace until then. With `user_id`,
+    only that account's."""
     s = svc.settings
     out: list[tuple[uuid.UUID, bool, Schedule, bool]] = []
+    query = (
+        select(Workspace)
+        .join(NotionConnection, NotionConnection.user_id == Workspace.user_id)
+        .where(NotionConnection.status == "active")
+    )
+    if user_id is not None:
+        query = query.where(Workspace.user_id == user_id)
     async with svc.session_factory() as db:
         owner_id = await db.scalar(select(User.id).where(User.is_owner))
-        rows = (
-            await db.scalars(
-                select(Workspace)
-                .join(NotionConnection, NotionConnection.user_id == Workspace.user_id)
-                .where(NotionConnection.status == "active")
-            )
-        ).all()
+        rows = (await db.scalars(query)).all()
+    if user_id is not None and owner_id != user_id:
+        owner_id = None  # only the requested account
     for row in rows:
         out.append((row.user_id, row.user_id == owner_id, Schedule(
             ZoneInfo(row.timezone), parse_time(row.morning_time), parse_time(row.evening_time),

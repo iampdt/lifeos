@@ -24,6 +24,9 @@ export type ProposalCard = {
   rule_ids: string[];
   depends_on: string[];
   expires_at: string;
+  /** Scorecard proposals: the workspace's names and units for the habit and metric keys. */
+  labels?: Record<string, string>;
+  units?: Record<string, string>;
 };
 
 export type QuestionRequest = {

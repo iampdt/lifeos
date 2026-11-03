@@ -28,6 +28,7 @@ from app.api.cron import router as cron_router
 from app.api.errors import ApiError, error_body
 from app.api.notion_connect import router as notion_connect_router
 from app.api.routes import router
+from app.api.schedule_routes import router as schedule_router
 from app.api.workspace_routes import router as workspace_router
 from app.auth.google import GoogleOIDC
 from app.auth.sessions import RateLimiter
@@ -235,6 +236,7 @@ def create_app(services: Services | None = None) -> FastAPI:
     app.include_router(notion_connect_router, prefix="/api/v1")
     app.include_router(workspace_router, prefix="/api/v1")
     app.include_router(ai_router, prefix="/api/v1")
+    app.include_router(schedule_router, prefix="/api/v1")
 
     @app.exception_handler(ApiError)
     async def _api_error(request: Request, exc: ApiError) -> JSONResponse:

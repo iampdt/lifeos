@@ -10,7 +10,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 
 export const metadata: Metadata = {
   title: "LifeOS",
-  description: "A chief of staff on top of your Notion Life OS",
+  description: "A chief of staff for your Notion workspace",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -66,15 +66,18 @@ function Details({ card }: { card: Card }) {
         ...(p.screen_time != null ? { screen_time: p.screen_time } : {}),
         ...((p.metrics ?? {}) as Record<string, number>),
       });
+      const label = (key: string) => card.labels?.[key] ?? humanize(key);
       return (
         <span className="flex flex-wrap gap-1.5">
           {checks.map(([name, done]) => (
             <Badge key={name} variant={done ? "secondary" : "outline"}>
-              {done ? "✓" : "✗"} {humanize(name)}
+              {done ? "✓" : "✗"} {label(name)}
             </Badge>
           ))}
           {metrics.map(([name, value]) => (
-            <Badge key={name} variant="outline">{humanize(name)} {String(value)}</Badge>
+            <Badge key={name} variant="outline">
+              {label(name)} {String(value)}{card.units?.[name] ? ` ${card.units[name]}` : ""}
+            </Badge>
           ))}
           {p.notes ? <span className="w-full text-xs text-muted-foreground">Notes: {String(p.notes)}</span> : null}
         </span>

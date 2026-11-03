@@ -22,6 +22,7 @@ from tests.workflow_support import OWNER_ID, add_user, make_deps, seed_task
 # 07:45 in New York (the account's morning briefing is due).
 NOW = datetime(2026, 11, 8, 12, 45, tzinfo=UTC)
 SECRET = "tick-secret"
+PASSWORD = "a long test password"
 
 
 def signed(job: str = "tick") -> dict[str, str]:
@@ -31,7 +32,7 @@ def signed(job: str = "tick") -> dict[str, str]:
 
 @pytest.fixture
 async def tick(session_factory):
-    member = await add_user(session_factory, "member@example.com")
+    member = await add_user(session_factory, "member@example.com", password=PASSWORD)
     async with session_factory() as db, db.begin():
         db.add(Workspace(user_id=member.id, mapping={}, timezone="America/New_York",
                          max_major_per_day=3, review_weekday=0, review_time="18:00",
@@ -50,7 +51,7 @@ async def tick(session_factory):
         return None if is_owner else deps_for(user_id)  # the owner stays on the environment
 
     contexts = Contexts(deps_for, InMemorySaver(), account_deps=account_deps)
-    settings = Settings(_env_file=None, lifeos_cron_secret=SECRET)
+    settings = Settings(_env_file=None, lifeos_cron_secret=SECRET, lifeos_api_token="tok")
     services = Services(settings, session_factory, contexts, clock=lambda: NOW)
     transport = httpx.ASGITransport(app=create_app(services))
     async with httpx.AsyncClient(transport=transport, base_url="https://t") as client:
@@ -122,3 +123,31 @@ async def test_a_lost_connection_stops_scheduling(tick, session_factory):
         await db.execute(update(NotionConnection).values(status="needs_reconnect"))
     ran = await run(client)
     assert [r["user_id"] for r in ran["ran"]] == [str(OWNER_ID)]
+
+
+# --- catching up when an account opens the app ---------------------------------------------
+
+
+async def test_opening_the_app_starts_a_due_routine_the_tick_then_skips(tick):
+    client, _, member = tick
+    owner = await client.post("/api/v1/schedule/catch-up", headers={"Authorization": "Bearer tok"})
+    assert [(r["job"], r["status"]) for r in owner.json()["started"]] == [
+        ("weekly_review", "waiting_input")
+    ]
+    later = await run(client)  # the tick arrives late: the owner's review already ran
+    assert [(r["user_id"], r["job"]) for r in later["ran"]] == [(str(member), "morning_briefing")]
+    again = await client.post("/api/v1/schedule/catch-up", headers={"Authorization": "Bearer tok"})
+    assert again.json() == {"started": []}
+
+
+async def test_each_account_catches_up_only_on_its_own_routines(tick):
+    client, _, _ = tick
+    login = await client.post(
+        "/api/v1/auth/login", json={"email": "member@example.com", "password": PASSWORD}
+    )
+    started = await client.post(
+        "/api/v1/schedule/catch-up", headers={"X-CSRF-Token": login.json()["csrf_token"]}
+    )
+    assert [r["job"] for r in started.json()["started"]] == ["morning_briefing"]
+    tick_after = await run(client)
+    assert [r["job"] for r in tick_after["ran"]] == ["weekly_review"]  # the owner's, untouched
