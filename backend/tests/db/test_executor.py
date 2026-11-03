@@ -264,3 +264,45 @@ async def test_only_approved_proposals_execute(session_factory, status):
     assert await executor(session_factory, fake).execute_approved() == []
     result = await executor(session_factory, fake).execute_one(proposal.id)
     assert result.outcome == "skipped" and fake.update_calls == 0
+
+
+def drifted(fake: FakeNotion, *, drop_option: str | None = None, drop_property: str | None = None):
+    """The owner changed the Tasks database in Notion after it was mapped."""
+    from app.demo.seed import schema_for
+
+    fake.schemas = {spec.data_source_id: schema_for(spec) for spec in SPECS.values()}
+    properties = fake.schemas[TASKS.data_source_id]["properties"]
+    if drop_option:
+        status = properties["Status"]["select"]
+        status["options"] = [o for o in status["options"] if o["name"] != drop_option]
+    if drop_property:
+        del properties[drop_property]
+
+
+async def test_writes_to_a_drifted_field_are_refused(session_factory):
+    fake = FakeNotion()
+    task = open_task(fake)
+    drifted(fake, drop_option="Done")  # renamed in Notion, say
+    proposal_id = await approved(
+        session_factory, ActionKind.TASK_MARK_DONE,
+        MarkDone(page_id=task, completed_on=date(2026, 11, 1)),
+    )  # fmt: skip
+    [result] = await executor(session_factory, fake).execute_approved()
+    assert result.outcome == "failed" and "Status: missing_option" in result.detail
+    assert fake.update_calls == 0
+    assert (await proposal_row(session_factory, proposal_id)).status == "failed"
+    async with session_factory() as session:
+        execution = await session.scalar(select(ActionExecution))
+    assert execution.error == {"type": "schema_drift"}
+
+
+async def test_fields_that_still_match_are_written(session_factory):
+    fake = FakeNotion()
+    task = open_task(fake)
+    drifted(fake, drop_option="Done", drop_property="Priority")
+    await approved(
+        session_factory, ActionKind.TASK_SET_DUE,
+        SetDue(page_id=task, new_due=date(2026, 11, 5), decision="reschedule"),
+    )  # fmt: skip
+    [result] = await executor(session_factory, fake).execute_approved()
+    assert result.outcome == "verified"

@@ -89,7 +89,10 @@ Status fields map semantic keys (`next`, `done`, …) to the workspace's own opt
 
 `notion/schema.py` compares each data source with the mapping and reports missing properties,
 wrong types and missing options. `GET /api/v1/notion/status` and `scripts/notion_check.py` show
-the result.
+the result. It is enforced twice: the daily drift check leaves a drifted module out of an
+account's workspace until the mapping is saved again (§5.7), and the executor checks each data
+source once per batch and refuses any write to a field that drifted (failed, `schema_drift`),
+while writes to fields that still match go ahead.
 
 ### 3.3 Reading
 
@@ -491,9 +494,7 @@ a Notion account:
 ## 14. Planned
 
 - **Quality bar:** more evaluation suites (weekly and monthly review, chat tool use).
-- **Multi-user:** sign-up, Notion OAuth per user, per-user data, onboarding from a Notion
-  template, paid model and hosting tiers.
-- Refuse writes to a data source whose schema has drifted (today drift is reported, not enforced).
+- **Paid tiers:** larger model and hosting plans, once the free tiers aren't enough.
 - A second LLM provider in the fallback chain.
 
 ## References

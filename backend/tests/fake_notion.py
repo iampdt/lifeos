@@ -22,6 +22,19 @@ class FakeNotion(InMemoryNotion):
         self.fail_after_create = False  # simulate a timeout after Notion created the page
         self.ignore_on_write: set[str] = set()  # property names silently dropped → mismatch
 
+    async def get_data_source(self, data_source_id: str) -> dict[str, Any]:
+        # A test that sets no schemas gets the test mapping's data sources described as they
+        # are mapped (the executor checks them before writing). Setting any schema turns this
+        # off, so a test can leave a data source out on purpose.
+        if not self.schemas:
+            from app.demo.seed import schema_for
+            from tests.workflow_support import SPECS
+
+            for spec in SPECS.values():
+                if spec.data_source_id == data_source_id:
+                    return schema_for(spec)
+        return await super().get_data_source(data_source_id)
+
     async def update_page(self, page_id: str, properties: dict[str, Any]) -> dict[str, Any]:
         kept = {name: body for name, body in properties.items() if name not in self.ignore_on_write}
         page = await super().update_page(page_id, kept)

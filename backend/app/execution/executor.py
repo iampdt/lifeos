@@ -5,8 +5,10 @@ For each approved proposal, in dependency order:
   2. updates: re-read the page; if it already has the target values → `noop`;
      if it changed since the proposal was made → `stale` (needs re-approval)
   3. creates: find-or-create by natural key, so a retry never duplicates a page
-  4. write, then re-read and compare → `verified` or `mismatch`
-  5. record the attempt and append to the audit log
+  4. refuse a write to a field whose Notion property has drifted from the mapping (missing,
+     another type, an option gone); each data source is checked once per batch
+  5. write, then re-read and compare → `verified` or `mismatch`
+  6. record the attempt and append to the audit log
 
 Kinds that can run automatically also keep the fields' values from just before the write, so
 `undo` can put them back (refused if the page changed since).
@@ -45,12 +47,17 @@ from app.notion.errors import NotionError
 from app.notion.mapping import DataSourceSpec
 from app.notion.queries import QuerySpec
 from app.notion.repositories import HabitRepository, PeriodRepository, TaskRepository
+from app.notion.schema import SchemaReport, check_data_source
 from app.permissions.policy import AUTO_ALLOWED, PermissionDenied, check_plan
 from app.services.calendar import DEFAULT_TZ
 
 logger = logging.getLogger("lifeos.executor")
 
 TERMINAL_FAILURES = {"rejected", "failed", "stale", "expired"}
+
+
+class SchemaDrift(Exception):
+    """A field the write needs no longer matches the Notion property it's mapped to."""
 
 
 class NotionWriter(Protocol):
@@ -61,6 +68,7 @@ class NotionWriter(Protocol):
     ) -> dict[str, Any]: ...
     def query_data_source(self, data_source_id: str, **kwargs: Any): ...
     async def get_relation_ids(self, page_id: str, property_id: str) -> list[str]: ...
+    async def get_data_source(self, data_source_id: str) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -93,6 +101,7 @@ class Executor:
         self.tz = tz
         self.actor = actor
         self.clock = clock
+        self._schemas: dict[str, SchemaReport] = {}  # checked once per batch
 
     # --- batch ---------------------------------------------------------------------------
 
@@ -190,9 +199,12 @@ class Executor:
                 raise _DependencyFailed(blocker)
             plan = build_plan(kind, parse_payload(kind, payload_data), self.specs, resolved)
             check_plan(plan, self.specs[plan.data_source])
+            await self._check_schema(plan)
             page_id, outcome, detail, prior = await self._apply(plan, snapshot)
         except PermissionDenied as exc:
             outcome, detail, error = "failed", str(exc), {"type": "permission_denied"}
+        except SchemaDrift as exc:
+            outcome, detail, error = "failed", str(exc), {"type": "schema_drift"}
         except _DependencyFailed as exc:
             outcome, detail, error = "failed", str(exc), {"type": "dependency_failed"}
         except NotionError as exc:
@@ -259,6 +271,10 @@ class Executor:
             return ExecutionResult(proposal_id, "stale", page_id, "changed in Notion since")
         values = _from_stored(spec, proposal.restore)
         check_plan(WritePlan(written.data_source, page_id, values), spec)
+        try:
+            await self._check_schema(WritePlan(written.data_source, page_id, values))
+        except SchemaDrift as exc:
+            return ExecutionResult(proposal_id, "failed", page_id, str(exc))
         await self.client.update_page(page_id, encode_properties(spec.properties, values))
         page = await self.client.get_page(page_id)
         if read_fields(spec, page, fields) != expected_fields(values):
@@ -274,6 +290,20 @@ class Executor:
                   entity_type="proposal", entity_id=str(proposal_id),
                   details={"kind": str(kind), "page_id": page_id, "outcome": outcome})  # fmt: skip
         return ExecutionResult(proposal_id, outcome, page_id)
+
+    async def _check_schema(self, plan: WritePlan) -> None:
+        """Raises SchemaDrift if a field the plan writes no longer matches Notion."""
+        report = self._schemas.get(plan.data_source)
+        if report is None:
+            report = await check_data_source(self.client, self.specs[plan.data_source])
+            self._schemas[plan.data_source] = report
+        problems = [i for i in report.issues if i.field in plan.values]
+        if problems:
+            listed = "; ".join(
+                f"{i.property_name}: {i.problem}{f' ({i.detail})' if i.detail else ''}"
+                for i in problems
+            )
+            raise SchemaDrift(f"{plan.data_source} changed in Notion; nothing written: {listed}")
 
     async def _resolve_dependencies(
         self, session: AsyncSession, proposal: ActionProposal

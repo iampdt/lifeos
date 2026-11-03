@@ -30,3 +30,14 @@
 | Check | Result |
 | --- | --- |
 | Backend tests | 297 passed. New: a progress figure written without asking while the week's own changes wait; kinds left on approval still wait; the automatic change listed, undone once and then refused; undo refused after the owner's own edit, which stands; a new scorecard row undone by clearing it; `auto` accepted only for allowed kinds |
+
+## Drift at write time (2026-11-03)
+
+| Piece | Purpose |
+| --- | --- |
+| Executor | Checks each data source's schema once per batch; a write to a field that drifted (missing, another type, an option gone) fails as `schema_drift` with nothing written; other fields still go ahead. Undo is checked the same way |
+| Tests | The fake describes the test mapping's data sources when a test sets no schemas, so every write is checked |
+
+| Check | Result |
+| --- | --- |
+| Backend tests | 299 passed. New: marking a task done when its Done option is gone fails with nothing written; moving a due date in the same drifted database still works |
