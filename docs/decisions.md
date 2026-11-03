@@ -108,4 +108,5 @@ replaced. Dates are when the decision was made.
 | I47 | Privacy and terms | Written from what the code stores and sends, not from a template; the AI section matches the consent disclosure |
 | I48 | Late schedules | Opening the app starts the account's due routines that haven't run, claimed like the tick's, because GitHub's schedules ran up to 8 hours late; the tick stays the source of truth for accounts that don't open the app |
 | I49 | Editable permission modes | Per account, stored as the changes from `approve`, so a new action kind needs approval until chosen otherwise; `auto` stays unavailable until an allowlist of safe actions and an undo exist. `off` is applied where proposals are built, so the run explains what was left out |
+| I50 | Memory | Short notes the account writes or confirms, never ones a model saves on its own: a note from chat could carry an instruction planted in a task title. Notes are read per prompt, sit in their own block, and can only tailor choices, never change rules or approvals. A fixed cap keeps every prompt small |
 

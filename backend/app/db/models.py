@@ -272,3 +272,18 @@ class AccountSettings(Base):
 
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
     action_modes: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
+
+
+class MemoryFact(Base):
+    """A short note an account asked LifeOS to remember (a preference or some context). Notes
+    go into the planning, review and chat prompts; the account sees, edits and deletes them."""
+
+    __tablename__ = "memory_facts"
+    __table_args__ = (Index("ix_memory_facts_user_id", "user_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    text: Mapped[str] = mapped_column(String(200))
+    source: Mapped[str] = mapped_column(String(10), default="you")  # you | chat
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

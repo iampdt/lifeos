@@ -1,10 +1,11 @@
-"""Chat with the Chief of Staff (architecture §5.4).
+"""Chat with the Chief of Staff (architecture §5.5).
 
 A loop of structured steps on the same router as the workflows: each model call returns one
 tool call or the final answer. Read tools return Notion data, wrapped as untrusted. Propose tools
 only create pending proposals, which the owner approves in the approvals panel; code checks
-every argument and the 3-major-tasks rule (R1) before proposing. Limits: 6 steps and 90 s per
-turn, 30 s per model call.
+every argument and the major-tasks limit (R1) before proposing. A note to remember is only
+suggested: the owner saves it from the chat panel. Limits: 6 steps and 90 s per turn, 30 s per
+model call.
 """
 
 from __future__ import annotations
@@ -26,14 +27,17 @@ from app.execution.actions import ActionKind, CreateTask, MarkDone, SetStatus
 from app.services.calendar import week_range
 from app.services.context import (
     DATA_RULES,
+    MEMORY_RULES,
     RefMap,
     book_line,
     clean,
     data_block,
     fmt_day,
+    memory_block,
     replace_refs,
     task_line,
 )
+from app.services.memory import MAX_CHARS, MAX_NOTES
 from app.services.rules import (
     MAJOR_STATUSES,
     fallback_order,
@@ -56,7 +60,7 @@ OUT_OF_STEPS = "I ran out of steps for this question. Try asking it more narrowl
 ToolName = Literal[
     "get_today", "get_overdue", "get_next_7_days", "get_inbox", "get_week_summary",
     "get_goals", "get_reading", "propose_mark_done", "propose_reschedule",
-    "propose_set_status", "propose_create_task",
+    "propose_set_status", "propose_create_task", "suggest_memory",
 ]  # fmt: skip
 
 
@@ -69,6 +73,7 @@ class ChatStep(BaseModel):
         default=None, description="YYYY-MM-DD: the new Due date, or a new task's Due date"
     )
     status: Literal["next", "doing", "waiting", "cancelled"] | None = None
+    note: str | None = Field(default=None, description="For suggest_memory: one short sentence")
     answer: str | None = Field(default=None, description="Your reply to the owner; plain text")
 
 
@@ -88,15 +93,20 @@ Tools:
 - propose_reschedule(ref, date): propose a new Due date
 - propose_set_status(ref, status): propose Next, Doing, Waiting or Cancelled
 - propose_create_task(title, date optional): propose a new task (Inbox, or Next when dated)
+- suggest_memory(note): when the owner asks you to remember something about them (a
+  preference, a routine, some context), suggest it as one short sentence; they confirm it
+  before it's saved
 Rules:
 - Use tools for facts; never guess task data. References come only from tool results.
 - Propose tools don't change Notion: they create proposals the owner approves in the
   Approvals panel. Say a change is "proposed", never that it's done.
-- Only propose changes the owner asked for.
+- Only propose changes the owner asked for, and only suggest notes the owner asked you to
+  remember, in their own words.
 - A day holds a limited number of major tasks (see LIMITS). If a proposal is refused,
   explain the reason.
 - Answer briefly in plain text and name tasks by title, never by reference code.
-{DATA_RULES}"""
+{DATA_RULES}
+{MEMORY_RULES}"""
 
 
 class _Turn:
@@ -149,6 +159,7 @@ class ChatAgent:
         yield {"type": "run", "run_id": str(run_id)}
 
         turn = _Turn(deps)
+        notes = await deps.memory()
         results: list[str] = []
         usage: list[dict[str, Any]] = []
         proposal_ids: list[str] = []
@@ -159,7 +170,7 @@ class ChatAgent:
             for step_number in range(MAX_STEPS):
                 if time.monotonic() - started > TURN_SECONDS:
                     break
-                prompt = self._prompt(message, history, results, MAX_STEPS - step_number)
+                prompt = self._prompt(message, history, results, MAX_STEPS - step_number, notes)
                 call = await ask_model(
                     deps.llm, ChatStep, agent="chat", system=SYSTEM, prompt=prompt
                 )
@@ -178,7 +189,12 @@ class ChatAgent:
                     break
                 yield {"type": "tool", "name": step.tool}
                 try:
-                    output, cards = await self._tool(turn, step, run_id)
+                    if step.tool == "suggest_memory":
+                        note = self._note(step, notes)
+                        yield {"type": "memory_suggestion", "text": note}
+                        output, cards = "Suggested; it's saved only if the owner confirms.", []
+                    else:
+                        output, cards = await self._tool(turn, step, run_id)
                 except _Refused as exc:
                     output, cards = f"REFUSED: {exc}", []
                     yield {"type": "tool_refused", "name": step.tool, "reason": str(exc)}
@@ -188,7 +204,8 @@ class ChatAgent:
                 args = ", ".join(
                     f"{k}={v}" for k, v in
                     (("ref", step.ref), ("date", step.date), ("status", step.status),
-                     ("title", clean(step.title, 60) if step.title else None)) if v
+                     ("title", clean(step.title, 60) if step.title else None),
+                     ("note", clean(step.note, 60) if step.note else None)) if v
                 )  # fmt: skip
                 results.append(f"{len(results) + 1}. {step.tool}({args}) →\n{output}")
             if not answered and status == "completed":
@@ -220,13 +237,20 @@ class ChatAgent:
         yield {"type": "done", "run_id": str(run_id), "proposals": len(proposal_ids)}
 
     def _prompt(
-        self, message: str, history: Sequence[dict[str, str]], results: list[str], left: int
+        self,
+        message: str,
+        history: Sequence[dict[str, str]],
+        results: list[str],
+        left: int,
+        notes: Sequence[str] = (),
     ) -> str:
         today = self.deps.today()
         lines = [
             f"Today: {fmt_day(today)} ({self.deps.tz.key}).",
             f"LIMITS: at most {self.deps.rules.max_major_per_day} major tasks a day.",
         ]
+        if notes:
+            lines += ["", memory_block(notes).rstrip()]
         recent = list(history)[-MAX_HISTORY:]
         if recent:
             lines.append("CONVERSATION SO FAR:")
@@ -337,6 +361,19 @@ class ChatAgent:
         cards = await proposal_cards(deps, [str(i) for i in ids], {})
         summary = "; ".join(f"{c['kind']} for {c['target']['title']!r}" for c in cards)
         return f"Proposed (pending the owner's approval): {summary}", cards
+
+    @staticmethod
+    def _note(step: ChatStep, notes: Sequence[str]) -> str:
+        note = clean(step.note, MAX_CHARS + 1)
+        if not note:
+            raise _Refused("a note is required")
+        if len(note) > MAX_CHARS:
+            raise _Refused(f"keep the note under {MAX_CHARS} characters")
+        if note.casefold() in {n.casefold() for n in notes}:
+            raise _Refused("that note is already saved")
+        if len(notes) >= MAX_NOTES:
+            raise _Refused("memory is full; the owner can remove notes in Settings")
+        return note
 
     @staticmethod
     def _future_day(raw: str | None, today: date) -> date:

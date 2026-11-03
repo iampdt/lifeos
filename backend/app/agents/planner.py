@@ -2,7 +2,7 @@
 
 The model only chooses among candidates code has already filtered; its answer is rejected if it
 names an unknown task, repeats one, or picks more than the free slots. A rejected or missing
-answer falls back to "P0, then P1, then earliest Due" (architecture §5.5).
+answer falls back to "P0, then P1, then earliest Due" (architecture §5.6).
 """
 
 from __future__ import annotations
@@ -19,10 +19,12 @@ from app.domain.models import Goal, Task
 from app.llm.router import LLMRouter
 from app.services.context import (
     DATA_RULES,
+    MEMORY_RULES,
     RefMap,
     clean,
     data_block,
     fmt_day,
+    memory_block,
     ref_titles,
     replace_refs,
     task_block,
@@ -51,7 +53,8 @@ You choose which candidate tasks the owner commits to on one day.
 - Never choose a task that is not in the candidate list.
 - Keep reasons short and concrete. Do not use markdown.
 - In reasons and the note, name tasks by their title, never by reference codes.
-{DATA_RULES}"""
+{DATA_RULES}
+{MEMORY_RULES}"""
 
 
 @dataclass
@@ -90,6 +93,7 @@ async def plan_day(
     committed: Sequence[Task] = (),
     goals: Sequence[Goal] = (),
     mode: Literal["fill", "keep"] = "fill",
+    memory: Sequence[str] = (),
 ) -> PlanResult:
     """`candidates` must already be in fallback order (rules.fallback_order).
 
@@ -107,12 +111,12 @@ async def plan_day(
     if mode == "keep":
         ask = (
             f"The owner has {len(candidates)} major tasks due on {fmt_day(day)}, more than the "
-            f"limit of 3. Choose the {slots} to keep that day; the rest will be offered for "
+            f"limit of {slots}. Choose the {slots} to keep that day; the rest will be offered for "
             "later days."
         )
     else:
         ask = f"Choose up to {slots} candidate tasks for {fmt_day(day)}."
-    prompt = f"{ask}\n\n{data_block(*sections)}"
+    prompt = f"{ask}\n\n{memory_block(memory)}{data_block(*sections)}"
 
     call = await ask_model(llm, DayPlan, agent="planner", system=SYSTEM, prompt=prompt)
     usage = [call.usage] if call.usage else []

@@ -18,6 +18,7 @@ from app.db.models import (
     AgentRun,
     AuditLog,
     CronRun,
+    MemoryFact,
     Session,
     User,
 )
@@ -228,6 +229,8 @@ async def test_deleting_an_account_removes_everything_it_stored(env):
         seed_task(env.fakes[user_id], "Another task", priority="P1", due=date(2026, 11, 1))
         await env.waiting_run(client)  # a second run, still waiting
     other_runs = [r["id"] for r in (await env.other.get("/api/v1/runs")).json()]
+    noted = await env.post(env.other, "/api/v1/memory", {"text": "Mornings are for deep work"})
+    assert noted.status_code == 201
     async with env.session_factory() as db, db.begin():
         db.add(CronRun(user_id=env.other_id, job="morning_briefing", local_date=date(2026, 11, 1)))
     checkpointer = env.contexts.checkpointer
@@ -242,7 +245,7 @@ async def test_deleting_an_account_removes_everything_it_stored(env):
     assert (await env.other.get("/api/v1/auth/me")).status_code == 401
 
     async with env.session_factory() as db:
-        for model in (AgentRun, ActionProposal, CronRun, Session):
+        for model in (AgentRun, ActionProposal, CronRun, Session, MemoryFact):
             left = await db.scalar(
                 select(func.count()).select_from(model).where(model.user_id == env.other_id)
             )

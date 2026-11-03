@@ -30,13 +30,13 @@ from app.execution.audit import audit
 from app.llm.base import LLMKeyRejected, LLMOff, LLMResult, LLMUnavailable
 from app.llm.router import LLMRouter
 
-DISCLOSURE_VERSION = "2026-11"
+DISCLOSURE_VERSION = "2026-11-03"
 DISCLOSURE = (
     "LifeOS uses Google's Gemini API on its free tier. On the free tier, Google may use what "
-    "LifeOS sends (your check-in messages, task titles and other workspace content) to improve "
-    "its products, and human reviewers may read it. Turn AI on only if you're comfortable with "
-    "that. Without AI, LifeOS still runs your routines with rules. With your own Gemini key, "
-    "your calls follow the terms of your own Google account instead."
+    "LifeOS sends (your check-in messages, task titles and other workspace content, and your "
+    "saved notes) to improve its products, and human reviewers may read it. Turn AI on only if "
+    "you're comfortable with that. Without AI, LifeOS still runs your routines with rules. With "
+    "your own Gemini key, your calls follow the terms of your own Google account instead."
 )
 
 

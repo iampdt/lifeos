@@ -314,3 +314,17 @@ export type HistoryRun = {
 };
 
 export type HistoryDay = { day: string; briefing: HistoryRun | null; checkin: HistoryRun | null };
+
+export type MemoryNote = {
+  id: string;
+  text: string;
+  source: "you" | "chat";
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type MemoryView = {
+  notes: MemoryNote[];
+  limits: { notes: number; chars: number };
+  editable: boolean;
+};

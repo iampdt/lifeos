@@ -20,9 +20,11 @@ from app.domain.models import Goal, Task
 from app.llm.router import LLMRouter
 from app.services.context import (
     DATA_RULES,
+    MEMORY_RULES,
     RefMap,
     clean,
     data_block,
+    memory_block,
     ref_titles,
     replace_refs,
     task_block,
@@ -58,7 +60,8 @@ provided.
 - At most three things to focus on next month, each one line.
 - In summary, wins, misses, patterns and focus, name tasks and goals by their title. Never write
   reference codes like T1 or G2 there; codes belong only in goal_notes.
-{DATA_RULES}"""
+{DATA_RULES}
+{MEMORY_RULES}"""
 
 
 @dataclass
@@ -99,6 +102,7 @@ async def draft_month_review(
     slipped: Sequence[Task],
     goals: Sequence[Goal] = (),
     weekly_reviews: Sequence[str] = (),
+    memory: Sequence[str] = (),
 ) -> MonthlyResult:
     done_refs, slipped_refs, goal_refs = RefMap("D"), RefMap("T"), RefMap("G")
     areas = "\n".join(
@@ -123,7 +127,7 @@ async def draft_month_review(
             "THIS MONTH'S WEEKLY REVIEWS:\n"
             + "\n---\n".join(clean(text, 600) for text in weekly_reviews[:5])
         )
-    prompt = data_block(*sections) + "\n\nWrite the monthly review."
+    prompt = memory_block(memory) + data_block(*sections) + "\n\nWrite the monthly review."
 
     call = await ask_model(
         llm, MonthlyReviewDraft, agent="monthly", system=SYSTEM, prompt=prompt, tier="smart"

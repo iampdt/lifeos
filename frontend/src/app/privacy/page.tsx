@@ -24,6 +24,7 @@ export default function PrivacyPage() {
             used) and each proposed change, including the titles of the tasks or pages it concerns, their values
             before the change, and your decision. While a run waits for you, its state (including what you wrote
             in a check-in) is kept so it can continue.</li>
+          <li><strong>Memory:</strong> the notes you save for LifeOS to keep in mind, until you delete them.</li>
           <li><strong>An activity log</strong> of IDs, kinds and outcomes (for example &quot;proposal approved&quot;),
             without page contents.</li>
           <li><strong>AI settings:</strong> whether and when you agreed to the AI terms below, your own Gemini key if
@@ -38,7 +39,7 @@ export default function PrivacyPage() {
         <p>
           LifeOS uses Google&apos;s Gemini API on its free tier to read check-ins, plan days and draft reviews. On the
           free tier, Google may use what LifeOS sends (your check-in messages, task titles and other workspace
-          content) to improve its products, and human reviewers may read it. LifeOS sends nothing to Gemini for your
+          content, and your saved notes) to improve its products, and human reviewers may read it. LifeOS sends nothing to Gemini for your
           account until you agree to this in Settings, and you can turn it off at any time; without AI, LifeOS runs
           your routines with rules. If you add your own Gemini key, your calls follow the terms of your own Google
           account instead.
@@ -62,7 +63,7 @@ export default function PrivacyPage() {
         <p>
           LifeOS keeps your data while you have an account. Settings → Account → <strong>Delete account</strong>
           removes all of it at once: your Notion connection (and LifeOS&apos;s access in Notion), runs, proposals,
-          the activity log, AI settings and sessions, leaving only a note that an account (by an internal ID) was
+          notes, the activity log, AI settings and sessions, leaving only a note that an account (by an internal ID) was
           deleted. Nothing in your Notion workspace is changed. Disconnecting
           Notion alone deletes the stored tokens. The servers&apos; own logs hold IDs and counts, not your content,
           and expire on the hosts&apos; schedules.

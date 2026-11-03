@@ -136,6 +136,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
             done=done,
             overdue=queue,
             goals=goals,
+            memory=await deps.memory(),
         )
         review = {k: v for k, v in result.as_dict().items() if k not in ("warnings", "usage")}
         return {"review": review, "warnings": result.warnings, "llm": result.usage}

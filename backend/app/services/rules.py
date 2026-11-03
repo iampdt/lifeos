@@ -67,7 +67,7 @@ def free_slots(
 
 
 def fallback_order(tasks: Iterable[Task], vocab: Vocabulary) -> list[Task]:
-    """Deterministic planning order (architecture §5.5): P0, then P1, …, then earliest Due."""
+    """Deterministic planning order (architecture §5.6): P0, then P1, …, then earliest Due."""
     return sorted(
         tasks, key=lambda t: (vocab.priority_rank(t), t.due or date.max, t.title.casefold())
     )

@@ -168,10 +168,11 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
         committed = major_tasks(remaining, tomorrow, vocab)
         slots = deps.rules.max_major_per_day - len(committed)
         candidates = planning_candidates(remaining, tomorrow, vocab)
-        goals = await ws.goals.active() if ws.goals and slots > 0 and candidates else []
+        needed = slots > 0 and bool(candidates)  # otherwise no model call is made
+        goals = await ws.goals.active() if ws.goals and needed else []
         result = await plan_day(
             deps.llm, day=tomorrow, slots=slots, candidates=candidates,
-            committed=committed, goals=goals,
+            committed=committed, goals=goals, memory=await deps.memory() if needed else (),
         )  # fmt: skip
         return {
             "plan": {

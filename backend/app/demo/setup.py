@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import secrets
 
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.auth.passwords import hash_password
-from app.db.models import User
+from app.db.models import MemoryFact, User
 from app.db.session import async_url
 from app.demo.notion import InMemoryNotion
 from app.demo.seed import DEMO_ENV, seed_workspace
@@ -27,6 +27,11 @@ DEMO_EMAIL = "demo@example.com"
 DEMO_IDENTITY = {"object": "user", "name": "LifeOS demo",
                  "bot": {"workspace_name": "Sample workspace (in memory)"}}  # fmt: skip
 RESET_TABLES = "action_executions, action_proposals, cron_runs, agent_runs, audit_log"
+# The demo's memory is read-only for visitors; these show what notes do.
+DEMO_NOTES = (
+    "I do my best deep work before noon, so put demanding tasks in the morning.",
+    "Fridays are lighter: sprint demos and admin, no new big tasks.",
+)
 
 
 class NotADemoDatabase(RuntimeError):
@@ -50,10 +55,13 @@ def demo_notion() -> InMemoryNotion:
 
 
 async def reset_demo(deps: WorkflowDeps) -> None:
-    """Fresh sample workspace, and no runs, proposals or audit entries from earlier visitors."""
+    """Fresh sample workspace and memory, and no runs, proposals or audit entries from earlier
+    visitors."""
     seed_workspace(deps.notion, deps.specs, deps.today())
     async with deps.session_factory() as db, db.begin():
         await db.execute(text(f"TRUNCATE {RESET_TABLES} RESTART IDENTITY CASCADE"))
+        await db.execute(delete(MemoryFact).where(MemoryFact.user_id == deps.user_id))
+        db.add_all(MemoryFact(user_id=deps.user_id, text=note, source="you") for note in DEMO_NOTES)
 
 
 async def demo_user(session_factory: async_sessionmaker[AsyncSession]) -> User:

@@ -115,6 +115,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
             slipped=load_tasks(state["slipped"]),
             goals=[Goal.model_validate(g) for g in state.get("goals") or []],
             weekly_reviews=state.get("weekly_reviews") or [],
+            memory=await deps.memory(),
         )
         review = {k: v for k, v in result.as_dict().items() if k not in ("warnings", "usage")}
         return {"review": review, "warnings": result.warnings, "llm": result.usage}

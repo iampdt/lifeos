@@ -194,8 +194,9 @@ without a scorecard.
 A loop of structured steps: each model call returns one tool call or the final answer, with at
 most 6 steps and 90 s per turn. Read tools: today, overdue, next 7 days, Inbox, week summary,
 goals, reading. Propose tools (mark done, reschedule, set status, create task) only create
-pending proposals, and code checks every argument and R1 first. Answers stream to the browser as
-server-sent events.
+pending proposals, and code checks every argument and R1 first. `suggest_memory` offers a note
+to remember (§5.8), which the account saves from the chat panel or ignores. Answers stream to the
+browser as server-sent events.
 
 ### 5.6 Without a model
 
@@ -227,6 +228,19 @@ due routines run first, up to `LIFEOS_TICK_MAX_RUNS` per tick, and the rest wait
 tick. A failed run frees its slot so a later tick retries it. Because scheduled runs can arrive
 hours late, the web app also asks on load (`POST /schedule/catch-up`) for the account's due
 routines, which start then if they haven't yet.
+
+### 5.8 Memory
+
+An account keeps up to 30 short notes (200 characters each) about its preferences and context,
+such as "deep work before noon" or "Fridays are light" (`services/memory.py`). They are added,
+edited and deleted in Settings; chat can only suggest one, which the account saves itself.
+
+The planner, both reviews and chat read the notes when they build a prompt, so a change applies
+to the next call. Notes go in an `<owner_memory>` block after the instructions, flattened and
+stripped of angle brackets like Notion data, and the system prompt says they tailor choices and
+wording but never change rules, limits or approvals. The check-in parser doesn't see them. The
+audit log records that a note was added, edited or deleted, never its text. The shared demo's
+notes are fixed.
 
 ## 6. Actions, approvals and permissions
 
@@ -313,6 +327,7 @@ account (`user_id`), and every query filters on it.
 | `oauth_states` | Single-use sign-in and connection attempts: state, nonce and PKCE verifier (Google), account (Notion), expiry |
 | `ai_access`, `ai_usage` | An account's agreement to the free-tier terms (with the disclosure version) and its own Gemini key (encrypted); tokens used per UTC day on the service key and on its own |
 | `workspaces` | An account's own mapping (module → data source and properties) and rule settings: timezone, major tasks a day, review day and time |
+| `memory_facts` | An account's notes to remember: text, source (`you` or `chat`), created and updated times |
 | `notion_connections` | An account's Notion workspace connection: workspace, bot, access and refresh tokens (encrypted), status (`active` or `needs_reconnect`) |
 | `cron_runs` | One row per (account, job, local date): scheduled routines and the daily drift check |
 | `checkpoint*` | LangGraph checkpoints, created and migrated by the checkpointer itself |
@@ -429,8 +444,7 @@ a Notion account:
 
 ## 14. Planned
 
-- **Memory:** long-term facts the owner can see and edit; a knowledge index over selected Notion
-  pages (pgvector) with cited answers.
+- **Knowledge index:** selected Notion pages indexed (pgvector) for answers with citations.
 - **Goal and learning specialists**, and an optional `goal.set_current` action.
 - **Quality bar:** more evaluation suites (weekly and monthly review, chat tool use).
 - **Multi-user:** sign-up, Notion OAuth per user, per-user data, onboarding from a Notion

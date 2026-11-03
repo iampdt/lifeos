@@ -27,7 +27,7 @@ Every error has the same shape:
 | --- | --- |
 | 401 | `unauthorized`, `invalid_credentials`, `bad_signature` |
 | 403 | `csrf_failed`, `password_sign_in_disabled`, `session_required`, `demo_account`, `environment_workspace`, `deployment_key` |
-| 404 | `unknown_workflow`, `unknown_job`, `http_error` |
+| 404 | `unknown_workflow`, `unknown_job`, `unknown_note`, `http_error` |
 | 409 | `run_state` (run not found or not waiting), `run_owned` (decide it through its run), `no_workspace`, `notion_reconnect`, `not_connected`, `disclosure_changed` |
 | 422 | `invalid_request`, `confirmation_mismatch`, `invalid_mapping` (with `details`), `key_rejected` |
 | 429 | `rate_limited` (sign-in) |
@@ -124,6 +124,7 @@ Outcomes: `verified`, `noop`, `mismatch`, `stale`, `failed`, `blocked` (writes o
 | `tool` | `{name}`: a tool is being called |
 | `tool_refused` | `{name, reason}`: arguments failed validation or a rule (the model sees the reason) |
 | `proposal` | `{proposal}`: a pending proposal was created |
+| `memory_suggestion` | `{text}`: a note to remember; nothing is saved unless the account saves it (`POST /memory` with `source: "chat"`) |
 | `answer` | `{text}` |
 | `error` | `{code, message}` (for example `llm_unavailable`) |
 | `done` | `{run_id, proposals}` |
@@ -175,6 +176,20 @@ An account's use of AI. The deployment owner uses the service's key: `GET /ai` r
 | Method and path | Description |
 | --- | --- |
 | `GET /reports/usage?days=30` | From the account's own runs (1–365 days): `{days, totals, workflows: {name: summary}, by_day: {date: {runs, tokens}}, models}`; a summary is `{runs, statuses, success_rate, llm_calls, input_tokens, output_tokens, llm_latency_ms: {p50, p95}, duration_ms: {p50}}` |
+
+### Memory
+
+Notes LifeOS keeps in mind when it plans, reviews and chats (architecture §5.8). They belong to
+the account, so these routes work before a workspace is set up.
+
+| Method and path | Description |
+| --- | --- |
+| `GET /memory` | `{notes: [{id, text, source, created_at, updated_at}], limits: {notes, chars}, editable}`; oldest first. `editable` is false in the demo |
+| `POST /memory` | Body `{text, source?: "you" \| "chat"}`. Whitespace is collapsed; 422 `invalid_request` when empty or over 200 characters, 409 `memory_full` at 30 notes. Returns 201 and the note |
+| `PUT /memory/{id}` | Body `{text}`; the same checks. 404 `unknown_note` for another account's note |
+| `DELETE /memory/{id}` | 204, or 404 `unknown_note` |
+
+The demo answers every change with 403 `demo_account`.
 
 ### Pages
 

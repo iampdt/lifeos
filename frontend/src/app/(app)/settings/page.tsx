@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { useSettings } from "@/components/app-shell";
 import { AIAccessCard } from "@/components/ai-access";
+import { MemoryCard } from "@/components/memory-card";
 import { ModesEditor } from "@/components/modes-editor";
 import { NotionConnectionCard } from "@/components/notion-connection";
 import { type Me, useSession } from "@/components/session";
@@ -142,6 +143,7 @@ export default function SettingsPage() {
           </Card>
         </>
       )}
+      {session && <MemoryCard />}
       {session && !session.owner && <AIAccessCard />}
       {session && !s?.demo && <NotionConnectionCard owner={session.owner} />}
       {session && deletable && <AccountCard me={session} />}

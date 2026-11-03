@@ -79,7 +79,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
         if len(majors) > deps.rules.max_major_per_day:
             result = await plan_day(
                 deps.llm, day=today, slots=deps.rules.max_major_per_day, candidates=majors,
-                goals=goals, mode="keep",
+                goals=goals, mode="keep", memory=await deps.memory(),
             )  # fmt: skip
             keep = result.task_ids
             deferred = [t for t in majors if t.id not in keep]
@@ -97,6 +97,7 @@ def build_graph(deps: WorkflowDeps) -> StateGraph:
                 slots=deps.rules.max_major_per_day,
                 candidates=candidates,
                 goals=goals,
+                memory=await deps.memory() if candidates else (),
             )
             data = {"mode": "fill", "pick_ids": result.task_ids}
         else:

@@ -68,6 +68,7 @@ export async function api<T>(
     signal: init.signal,
   });
   if (!response.ok) throw await toError(response);
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 

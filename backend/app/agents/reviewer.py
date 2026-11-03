@@ -18,9 +18,11 @@ from app.domain.models import Goal, Task
 from app.llm.router import LLMRouter
 from app.services.context import (
     DATA_RULES,
+    MEMORY_RULES,
     RefMap,
     clean,
     data_block,
+    memory_block,
     ref_titles,
     replace_refs,
     task_block,
@@ -57,7 +59,8 @@ Write a short, honest review of the owner's week from the numbers and lists prov
 - At most three priorities for next week, each one line.
 - In summary, wins, misses, bottlenecks and priorities, name tasks by their title. Never write
   reference codes like T1 or D2 there; codes belong only in the advice list.
-{DATA_RULES}"""
+{DATA_RULES}
+{MEMORY_RULES}"""
 
 MAX_ITEMS = 5
 
@@ -123,6 +126,7 @@ async def draft_review(
     done: Sequence[Task],
     overdue: Sequence[Task],
     goals: Sequence[Goal] = (),
+    memory: Sequence[str] = (),
 ) -> ReviewResult:
     refs, done_refs = RefMap("T"), RefMap("D")
     areas = "\n".join(
@@ -141,7 +145,7 @@ async def draft_review(
     ]  # fmt: skip
     if goals:
         sections.append("ACTIVE GOALS:\n" + "\n".join(f"- {clean(g.title)}" for g in goals))
-    prompt = data_block(*sections) + "\n\nWrite the weekly review."
+    prompt = memory_block(memory) + data_block(*sections) + "\n\nWrite the weekly review."
 
     call = await ask_model(
         llm, WeeklyReviewDraft, agent="reviewer", system=SYSTEM, prompt=prompt, tier="smart"

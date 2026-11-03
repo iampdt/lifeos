@@ -94,6 +94,8 @@ async def test_workflows_run_on_the_sample_workspace_and_reset_restores_it(clien
     today = {t["title"] for t in (await c.get("/api/v1/tasks?view=today")).json()}
     assert "Mock system design interview" in today
     assert (await c.get("/api/v1/runs")).json() == []
+    memory = (await c.get("/api/v1/memory")).json()
+    assert len(memory["notes"]) == 2 and memory["editable"] is False
     for _ in range(2):
         await c.post("/api/v1/demo/reset", headers=headers)
     limited = await c.post("/api/v1/demo/reset", headers=headers)

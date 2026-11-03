@@ -23,6 +23,7 @@ from app.notion.mapping import DataSourceSpec
 from app.notion.workspace import NotionWorkspace, build_workspace
 from app.permissions.policy import DEFAULT_MODES, Mode
 from app.services.calendar import DEFAULT_TZ
+from app.services.memory import list_notes
 from app.services.periods import PeriodResolver
 from app.services.rules import MAX_MAJOR_PER_DAY, Vocabulary
 from app.services.scorecard import Scorecard
@@ -89,6 +90,10 @@ class WorkflowDeps:
 
     def mode(self, kind: ActionKind) -> Mode:
         return self.modes.get(kind, Mode.APPROVE)
+
+    async def memory(self) -> list[str]:
+        """The account's saved notes, read when a prompt is built so edits apply at once."""
+        return [note.text for note in await list_notes(self.session_factory, self.user_id)]
 
     def resolver(self, today: date) -> PeriodResolver:
         """Tasks link to weekly and monthly pages only where the workspace has both the

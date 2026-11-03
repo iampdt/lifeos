@@ -1,9 +1,10 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2Icon, SendIcon } from "lucide-react";
+import { BookmarkPlusIcon, Loader2Icon, SendIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { useMemory, useRemember } from "@/components/memory-card";
 import { ProposalCardView } from "@/components/proposal-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +15,8 @@ import type { ProposalCard } from "@/lib/types";
 type Message =
   | { role: "user" | "assistant"; content: string }
   | { role: "activity"; content: string }
-  | { role: "proposal"; card: ProposalCard };
+  | { role: "proposal"; card: ProposalCard }
+  | { role: "memory"; text: string };
 
 const TOOL_LABELS: Record<string, string> = {
   get_today: "Checking today's tasks",
@@ -28,6 +30,7 @@ const TOOL_LABELS: Record<string, string> = {
   propose_reschedule: "Preparing a change",
   propose_set_status: "Preparing a change",
   propose_create_task: "Preparing a change",
+  suggest_memory: "Suggesting a note to remember",
 };
 
 export function ChatPanel() {
@@ -60,6 +63,8 @@ export function ChatPanel() {
         } else if (event.type === "proposal") {
           setMessages((m) => [...m, { role: "proposal", card: event.proposal as ProposalCard }]);
           client.invalidateQueries({ queryKey: ["approvals"] });
+        } else if (event.type === "memory_suggestion") {
+          setMessages((m) => [...m, { role: "memory", text: String(event.text) }]);
         } else if (event.type === "answer") {
           setMessages((m) => [...m, { role: "assistant", content: String(event.text) }]);
         } else if (event.type === "error") {
@@ -94,6 +99,8 @@ export function ChatPanel() {
           {messages.map((m, i) =>
             m.role === "proposal" ? (
               <ProposalCardView key={i} card={m.card} />
+            ) : m.role === "memory" ? (
+              <MemorySuggestion key={i} text={m.text} />
             ) : m.role === "activity" ? (
               <p key={i} className="text-xs text-muted-foreground">{m.content}…</p>
             ) : (
@@ -127,5 +134,35 @@ export function ChatPanel() {
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+/** A note chat suggests remembering; nothing is saved until the account saves it here. */
+function MemorySuggestion({ text }: { text: string }) {
+  const memory = useMemory();
+  const remember = useRemember();
+  const [state, setState] = useState<"open" | "saved" | "dismissed">("open");
+  const editable = memory.data?.editable ?? false;
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border p-3 text-sm">
+      <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <BookmarkPlusIcon className="size-3.5" /> Remember this?
+      </p>
+      <p>{text}</p>
+      {state === "saved" && <p className="text-xs text-muted-foreground">Saved to Memory in Settings.</p>}
+      {state === "dismissed" && <p className="text-xs text-muted-foreground">Not saved.</p>}
+      {state === "open" && !editable && memory.data && (
+        <p className="text-xs text-muted-foreground">The shared demo&apos;s memory can&apos;t be changed.</p>
+      )}
+      {state === "open" && editable && (
+        <div className="flex gap-2">
+          <Button size="xs" disabled={remember.isPending}
+            onClick={() => remember.mutate({ text, source: "chat" }, { onSuccess: () => setState("saved") })}>
+            Save
+          </Button>
+          <Button size="xs" variant="ghost" onClick={() => setState("dismissed")}>Dismiss</Button>
+        </div>
+      )}
+    </div>
   );
 }
