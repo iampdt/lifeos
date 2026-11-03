@@ -228,3 +228,29 @@ class Workspace(Base):
     review_time: Mapped[str] = mapped_column(String(5), default="18:00")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AIAccess(Base):
+    """How an account may use AI (multi-user §AI under free tier): its agreement to the Gemini
+    free-tier terms for the service's key, and its own Gemini key (encrypted)."""
+
+    __tablename__ = "ai_access"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    consented_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    consent_version: Mapped[str | None] = mapped_column(String(16))
+    key: Mapped[str | None] = mapped_column(Text)
+    key_hint: Mapped[str | None] = mapped_column(String(8))  # the key's last four characters
+    key_status: Mapped[str | None] = mapped_column(String(16))  # active | rejected
+    key_added_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AIUsage(Base):
+    """Tokens an account used per UTC day, on the service's key and on its own."""
+
+    __tablename__ = "ai_usage"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    service_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    own_tokens: Mapped[int] = mapped_column(Integer, default=0)

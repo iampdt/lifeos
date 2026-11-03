@@ -74,3 +74,19 @@ Design: [multi-user.md](../multi-user.md). This log grows with each step.
 | Production after part 1 | The demo's check-in lists habits and metrics with units, records `metrics`, and verifies the write |
 | Local walkthrough | Through the web app's proxy against a stand-in Notion: connect → suggestion (all three databases, status meanings, priorities, habits with units) → save → tasks listed and a check-in verified. The setup page itself wasn't checked visually (the browser extension wasn't available) |
 
+## 9.5 AI under the free tier (2026-11-03)
+
+| Piece | Purpose |
+| --- | --- |
+| `app/llm/access.py` | `AIAccessService` (consent, own keys, daily usage) and `AccountLLM`, the router an account's workflows use: own key, then the allowance, then rules |
+| Migration 0009 | `ai_access` (consent and its version, encrypted key, hint, status) and `ai_usage` (tokens per account and UTC day) |
+| `GeminiProvider.check_key` | Asks Google about the key without generating anything; tells a refused key from a quota or outage |
+| `app/api/ai_routes.py` | `GET /ai`, consent and withdrawal, add and remove a key |
+| Messages | Run warnings and chat give the account's reason (allowance used up, AI off) instead of a generic "unavailable" |
+| Web app | Settings → **Your AI access**: the disclosure and agreement, today's usage, and an own-key form |
+
+| Check | Result |
+| --- | --- |
+| Backend tests | 239 passed. New: no consent and no key means rules, with the reason; consent uses the service key until the allowance runs out; an own key comes first and doesn't touch the allowance; a refused key is marked and the allowance takes over; an own key out of quota falls back for that call; keys are checked first and stored encrypted; the API's consent versioning, key errors, owner refusal and account deletion |
+| Against Google, with the service key | The real key passed the check; a made-up key was refused (400 `INVALID_ARGUMENT`) and classified as rejected; a call routed through an account's own key (stored encrypted in a throwaway database) answered with `gemini-3.5-flash-lite` and was counted as own-key usage, not allowance |
+

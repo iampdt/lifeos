@@ -91,9 +91,21 @@ tasks, with nothing in the code that only makes sense for one person's setup.
 
 ## AI under free tier
 
-- Each call goes through the user's own key when they have added one (stored encrypted), and
-  otherwise through the service key within a per-user daily allowance plus a global cap.
-- When neither is available, workflows use their rule-based fallbacks and chat explains why.
+- Each call goes through the user's own Gemini key when they have added one, and otherwise
+  through the service key within a per-user daily allowance (`LLM_USER_DAILY_TOKENS`, counted
+  per UTC day in `ai_usage`, so restarts don't reset it) plus the service's overall daily cap.
+  An own key that Google refuses is marked and the allowance takes over; one that is out of
+  quota falls back to the allowance for that call.
+- **Consent:** before the service key sends anything, the account reads the free-tier
+  disclosure and agrees (Settings → Your AI access). Agreement is recorded with the
+  disclosure's version, so changing the text asks again. An account's own key follows its own
+  Google account's terms instead.
+- **Own keys** are checked with Google before they are saved, stored encrypted
+  (`LIFEOS_ENCRYPTION_KEY`), never shown again (only the last four characters), and removed with
+  the account.
+- The deployment owner and the demo use the service key directly, within the overall cap.
+- When neither is available, workflows use their rule-based fallbacks, and run warnings and chat
+  say why ("you've used today's AI allowance", "AI is off for your account").
 - The evaluation set keeps guarding quality; new cases cover generic habit names and mappings.
 
 ## Multi-tenancy
@@ -139,6 +151,6 @@ whose local time has reached a scheduled routine that hasn't run today, the API 
 | 9.2 | Multi-tenancy: `user_id` everywhere, per-account contexts, isolation tests, delete account | Done |
 | 9.3 | Notion OAuth connect, encrypted tokens with refresh, disconnect | Done |
 | 9.4 | Generic workspace model: modules, mappings, onboarding UI, template, generic habits, per-user rules | Done |
-| 9.5 | AI allowance, own-key option, disclosure and consent | |
+| 9.5 | AI allowance, own-key option, disclosure and consent | Done |
 | 9.6 | Per-user scheduling | |
 | 9.7 | Privacy and terms pages, Notion review submission, the owner's migration to the new flow, rollout | |

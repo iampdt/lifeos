@@ -43,7 +43,9 @@ class Settings(BaseSettings):
     llm_fast_models: str = "gemini-3.5-flash-lite,gemini-3.1-flash-lite"
     llm_smart_models: str = "gemini-3.5-flash,gemini-3.5-flash-lite"
     llm_timeout_seconds: float = 30.0
-    llm_daily_token_budget: int = 300_000
+    llm_daily_token_budget: int = 300_000  # the service key, all accounts together
+    # Each account's daily allowance on the service key (the owner isn't limited by it).
+    llm_user_daily_tokens: int = 40_000
 
     # Bearer token for scripts; it acts as the owner account. Unset: bearer requests are refused.
     lifeos_api_token: SecretStr | None = None

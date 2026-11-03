@@ -165,7 +165,9 @@ class ChatAgent:
                 )
                 if call.value is None:
                     status, error = "failed", {"type": "llm_unavailable"}
-                    yield {"type": "error", "code": "llm_unavailable", "message": UNAVAILABLE}
+                    kind, _, detail = (call.error or "").partition(":")
+                    reason = f"{detail.strip()}." if kind == "LLMOff" else UNAVAILABLE
+                    yield {"type": "error", "code": "llm_unavailable", "message": reason}
                     break
                 usage.append(call.usage or {})
                 step = call.value

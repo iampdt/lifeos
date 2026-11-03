@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { useSettings } from "@/components/app-shell";
+import { AIAccessCard } from "@/components/ai-access";
 import { NotionConnectionCard } from "@/components/notion-connection";
 import { type Me, useSession } from "@/components/session";
 import { Badge } from "@/components/ui/badge";
@@ -148,6 +149,7 @@ export default function SettingsPage() {
           </Card>
         </>
       )}
+      {session && !session.owner && <AIAccessCard />}
       {session && !s?.demo && <NotionConnectionCard owner={session.owner} />}
       {session && deletable && <AccountCard me={session} />}
     </div>

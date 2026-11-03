@@ -9,7 +9,12 @@ from google import genai
 from google.genai import errors, types
 from pydantic import BaseModel, ValidationError
 
-from app.llm.base import Completion, LLMBadOutput, LLMError, LLMUnavailable
+from app.llm.base import Completion, LLMBadOutput, LLMError, LLMKeyRejected, LLMUnavailable
+
+
+def _key_rejected(exc: errors.ClientError) -> bool:
+    # An invalid key is a 400 whose message names the key; a disabled one is 401 or 403.
+    return exc.code in (401, 403) or (exc.code == 400 and "api key" in str(exc).lower())
 
 
 class GeminiProvider:
@@ -17,6 +22,22 @@ class GeminiProvider:
 
     def __init__(self, api_key: str) -> None:
         self._client = genai.Client(api_key=api_key)
+
+    async def check_key(self, model: str) -> None:
+        """Raises LLMKeyRejected if Google refuses the key; a quota or outage isn't the key's
+        fault and raises LLMUnavailable."""
+        try:
+            await asyncio.wait_for(self._client.aio.models.get(model=model), timeout=15)
+        except errors.ClientError as exc:
+            if _key_rejected(exc):
+                raise LLMKeyRejected(f"{exc.code} {exc.status}") from exc
+            if exc.code == 429:
+                return  # the key works; it's just out of quota right now
+            raise LLMUnavailable(f"{exc.code} {exc.status}") from exc
+        except errors.ServerError as exc:
+            raise LLMUnavailable(f"{exc.code} {exc.status}") from exc
+        except (TimeoutError, httpx.TimeoutException, httpx.TransportError) as exc:
+            raise LLMUnavailable(type(exc).__name__) from exc
 
     async def generate_structured[T: BaseModel](
         self,
@@ -46,6 +67,8 @@ class GeminiProvider:
             # 404: model not offered to this account; 429: quota. Both mean "try the next model".
             if exc.code in (404, 429):
                 raise LLMUnavailable(f"{model}: {exc.code} {exc.status}") from exc
+            if _key_rejected(exc):
+                raise LLMKeyRejected(f"{model}: {exc.code} {exc.status}") from exc
             raise LLMError(f"{model}: {exc.code} {exc.status}") from exc
         except errors.ServerError as exc:  # 500/503/504
             raise LLMUnavailable(f"{model}: {exc.code} {exc.status}") from exc

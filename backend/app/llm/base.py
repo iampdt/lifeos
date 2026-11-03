@@ -34,6 +34,20 @@ class LLMNotConfigured(LLMError):
     fallback = False
 
 
+class LLMOff(LLMError):
+    """AI isn't available to this account right now: it hasn't agreed to the free-tier terms
+    and has no key of its own, or today's allowance is used up. The message says which, for
+    the user."""
+
+    fallback = False
+
+
+class LLMKeyRejected(LLMError):
+    """The provider refused the API key itself (invalid, revoked or not permitted)."""
+
+    fallback = False
+
+
 @dataclass(frozen=True)
 class Completion[T: BaseModel]:
     value: T

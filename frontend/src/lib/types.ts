@@ -213,3 +213,12 @@ export type WorkspaceSuggestion = {
   from_template: boolean;
 };
 
+/** An account's AI access; the deployment owner gets `{mode: "deployment"}` only. */
+export type AIView = {
+  mode: "deployment" | "own_key" | "allowance" | "allowance_used" | "off";
+  service_available?: boolean;
+  consent?: { given: boolean; outdated: boolean; version: string; text: string };
+  allowance?: { tokens: number; used_today: number };
+  own_key?: { available: boolean; hint: string | null; status: string | null; tokens_today: number };
+};
+

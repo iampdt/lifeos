@@ -52,7 +52,7 @@ cookie is first-party. Scheduled jobs call the backend directly with a signed re
 | `permissions/` | Field-level write allowlist and per-kind permission modes |
 | `services/` | Domain rules, calendar (weeks, months, timezone), period lookup, prompt-safe context |
 | `notion/` | API client, property codecs and encoders, mapping, schema drift, view queries, repositories, OAuth and accounts' connections (`oauth.py`, `connections.py`) |
-| `llm/` | Provider protocol, Gemini provider, mock provider, router with fallback and budget |
+| `llm/` | Provider protocol, Gemini provider, mock provider, router with fallback and budget, accounts' AI access (own key, allowance, consent) |
 | `db/` | SQLAlchemy models, engine and database URL handling |
 | `core/` | Settings from the environment |
 
@@ -283,6 +283,7 @@ account (`user_id`), and every query filters on it.
 | `audit_log` | Append-only (a trigger rejects `UPDATE` and `DELETE`, except through `purge_user_audit` when an account is deleted): account, actor, event, entity, details. IDs and kinds only, no page contents |
 | `users`, `sessions` | Accounts (Google subject ID or password hash; at most one `is_owner`); sessions store a SHA-256 of the cookie token and a CSRF token |
 | `oauth_states` | Single-use sign-in and connection attempts: state, nonce and PKCE verifier (Google), account (Notion), expiry |
+| `ai_access`, `ai_usage` | An account's agreement to the free-tier terms (with the disclosure version) and its own Gemini key (encrypted); tokens used per UTC day on the service key and on its own |
 | `workspaces` | An account's own mapping (module → data source and properties) and rule settings: timezone, major tasks a day, review day and time |
 | `notion_connections` | An account's Notion workspace connection: workspace, bot, access and refresh tokens (encrypted), status (`active` or `needs_reconnect`) |
 | `cron_runs` | One row per (account, job, local date) |

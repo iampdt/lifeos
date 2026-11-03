@@ -23,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.api.ai_routes import router as ai_router
 from app.api.cron import router as cron_router
 from app.api.errors import ApiError, error_body
 from app.api.notion_connect import router as notion_connect_router
@@ -35,7 +36,9 @@ from app.core.crypto import TokenCipher
 from app.db.models import User
 from app.db.session import make_engine, make_session_factory
 from app.demo.setup import demo_notion, demo_specs, demo_user, ensure_demo_database, reset_demo
-from app.llm.factory import build_router
+from app.llm.access import AccountLLM, AIAccessService
+from app.llm.factory import build_router, check_gemini_key, own_key_router
+from app.llm.router import LLMRouter
 from app.notion.client import NotionClient
 from app.notion.connections import NotionConnections, ReconnectNeeded
 from app.notion.errors import NotionError
@@ -62,6 +65,7 @@ class Services:
     oauth_limiter: RateLimiter = field(default_factory=lambda: RateLimiter(30, 60))
     google: GoogleOIDC | None = None  # set when Google sign-in is configured
     connections: NotionConnections | None = None  # set when Notion OAuth is configured
+    ai: AIAccessService | None = None  # accounts' AI access (not used by the owner or the demo)
 
     async def owner_context(self) -> UserContext | None:
         """The owner account's context: scheduled jobs and scripts act as the owner."""
@@ -125,13 +129,14 @@ async def build_services(settings: Settings, stack: AsyncExitStack) -> Services:
         tz=ZoneInfo(settings.timezone),
     )
     connections = notion_connections(settings, session_factory)
+    ai = ai_access(settings, session_factory, llm)
     accounts = None
     if connections is not None:
 
         def account_deps(notion, account_specs, user_id, tz, rules) -> WorkflowDeps:
             return WorkflowDeps(
-                session_factory, notion, account_specs, llm, user_id=user_id, tz=tz, rules=rules,
-                writes_enabled=settings.lifeos_writes_enabled,
+                session_factory, notion, account_specs, AccountLLM(user_id, ai), user_id=user_id,
+                tz=tz, rules=rules, writes_enabled=settings.lifeos_writes_enabled,
             )  # fmt: skip
 
         accounts = AccountWorkspaces(session_factory, connections, account_deps)
@@ -146,6 +151,7 @@ async def build_services(settings: Settings, stack: AsyncExitStack) -> Services:
         contexts,
         google=google_client(settings),
         connections=connections,
+        ai=ai,
     )
 
 
@@ -157,6 +163,20 @@ def google_client(settings: Settings) -> GoogleOIDC | None:
         settings.google_client_id,
         settings.google_client_secret.get_secret_value(),
         f"{settings.lifeos_public_url.rstrip('/')}/api/v1/auth/google/callback",
+    )
+
+
+def ai_access(
+    settings: Settings, session_factory: async_sessionmaker[AsyncSession], service: LLMRouter
+) -> AIAccessService:
+    key = settings.lifeos_encryption_key
+    return AIAccessService(
+        session_factory,
+        service,
+        allowance=settings.llm_user_daily_tokens,
+        cipher=TokenCipher(key.get_secret_value()) if key else None,
+        own_router=partial(own_key_router, settings),
+        check_key=partial(check_gemini_key, settings),
     )
 
 
@@ -203,6 +223,7 @@ def create_app(services: Services | None = None) -> FastAPI:
     app.include_router(cron_router, prefix="/api/v1")
     app.include_router(notion_connect_router, prefix="/api/v1")
     app.include_router(workspace_router, prefix="/api/v1")
+    app.include_router(ai_router, prefix="/api/v1")
 
     @app.exception_handler(ApiError)
     async def _api_error(request: Request, exc: ApiError) -> JSONResponse:

@@ -33,5 +33,7 @@ async def ask_model[T: BaseModel](
 
 
 def unavailable_warning(error: str | None) -> str:
-    reason = (error or "").split(":", 1)[0] or "unknown error"
-    return f"AI unavailable ({reason}); used the rule-based fallback."
+    kind, _, detail = (error or "").partition(":")
+    if kind == "LLMOff":  # the account's own situation, explained in the message
+        return f"{detail.strip()}; used the rule-based fallback."
+    return f"AI unavailable ({kind or 'unknown error'}); used the rule-based fallback."

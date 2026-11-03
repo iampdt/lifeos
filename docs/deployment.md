@@ -125,6 +125,10 @@ Lets accounts connect their own Notion workspace (multi-user step 9.3).
    Keep a copy somewhere safe: without it, stored tokens can't be read and every account has to
    connect again. To rotate it, set `new_key,old_key`.
 
+The same key lets accounts add their own Gemini key (Settings → Your AI access). Without one,
+accounts share `GEMINI_API_KEY` within `LLM_USER_DAILY_TOKENS` a day each (default 40,000), after
+agreeing to the free-tier terms.
+
 From the next deploy, Settings shows **Your Notion** with **Connect Notion**. The owner's routines
 keep using the workspace configured by `NOTION_TOKEN`.
 

@@ -26,13 +26,13 @@ Every error has the same shape:
 | Status | Codes |
 | --- | --- |
 | 401 | `unauthorized`, `invalid_credentials`, `bad_signature` |
-| 403 | `csrf_failed`, `password_sign_in_disabled`, `session_required`, `demo_account`, `environment_workspace` |
+| 403 | `csrf_failed`, `password_sign_in_disabled`, `session_required`, `demo_account`, `environment_workspace`, `deployment_key` |
 | 404 | `unknown_workflow`, `unknown_job`, `http_error` |
-| 409 | `run_state` (run not found or not waiting), `run_owned` (decide it through its run), `no_workspace`, `notion_reconnect`, `not_connected` |
-| 422 | `invalid_request`, `confirmation_mismatch`, `invalid_mapping` (with `details`) |
+| 409 | `run_state` (run not found or not waiting), `run_owned` (decide it through its run), `no_workspace`, `notion_reconnect`, `not_connected`, `disclosure_changed` |
+| 422 | `invalid_request`, `confirmation_mismatch`, `invalid_mapping` (with `details`), `key_rejected` |
 | 429 | `rate_limited` (sign-in) |
 | 502 | `notion_<code>`, `run_failed` |
-| 503 | `auth_not_configured`, `cron_not_configured`, `no_owner` |
+| 503 | `auth_not_configured`, `cron_not_configured`, `no_owner`, `key_check_failed` |
 
 ## Endpoints
 
@@ -152,6 +152,19 @@ owner's workspace comes from the environment and is read-only here.
 | `GET /workspace/suggestion` | A first guess at the whole mapping: `{data_sources, modules, schemas, from_template}`, from the databases the connection can see (names and types only) |
 | `GET /workspace/data-sources/{id}?module=` | One database's properties (`schema`) and a guess at mapping the module onto it (`suggestion`); 404 `not_shared` when the connection can't see it |
 | `PUT /workspace` | Body `{modules, settings}`, with `settings` `{timezone, max_major_per_day, review_weekday, review_time}`. Checked structurally and then against the live data sources; problems come back as 422 `invalid_mapping` with every one in `error.details`. The owner's environment workspace answers 403 `environment_workspace` |
+
+### AI access
+
+An account's use of AI. The deployment owner uses the service's key: `GET /ai` returns
+`{"mode": "deployment"}` and the other routes answer 403 `deployment_key`.
+
+| Method and path | Description |
+| --- | --- |
+| `GET /ai` | `{mode, service_available, consent, allowance, own_key}`. `mode` is `own_key`, `allowance`, `allowance_used` or `off`; `consent` carries the disclosure `text` and `version`; `allowance` is `{tokens, used_today}`; `own_key` is `{available, hint, status, tokens_today}` |
+| `POST /ai/consent` | Body `{version}`: agree to the free-tier disclosure that was shown. 409 `disclosure_changed` if it has changed since |
+| `POST /ai/consent/withdraw` | Stop using the service key for this account |
+| `PUT /ai/key` | Body `{key}`. Browser sessions only. Checked with Google, then stored encrypted. 422 `key_rejected`, 503 `key_check_failed` (retryable), 404 `own_keys_unavailable` without `LIFEOS_ENCRYPTION_KEY` |
+| `DELETE /ai/key` | Remove the stored key |
 
 ### Notion connection
 

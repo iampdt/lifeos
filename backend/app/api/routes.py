@@ -25,6 +25,7 @@ from app.auth.google import GoogleSignInError, new_pkce
 from app.auth.sessions import SESSION_COOKIE, SessionService, normalize_email
 from app.db.models import ActionProposal, AgentRun, OAuthState
 from app.demo.setup import demo_user, reset_demo
+from app.llm.access import AccountLLM
 from app.notion.errors import NotionError
 from app.notion.schema import check_data_source
 from app.permissions.policy import DEFAULT_MODES
@@ -440,6 +441,11 @@ async def get_settings_view(
 ) -> dict[str, Any]:
     svc = services(request)
     llm = ctx.deps.llm
+    # An account sees its own allowance; the owner sees the service key's daily total.
+    if isinstance(llm, AccountLLM):
+        tokens_today = (await llm.access.status(llm.user_id)).used_today
+    else:
+        tokens_today = llm.tokens_spent_today()
     if svc.settings.lifeos_demo_mode:
         profile = "demo"
     elif principal.is_owner:
@@ -458,7 +464,7 @@ async def get_settings_view(
             "provider": llm.provider.name if llm.provider else None,
             "chains": llm.chains,
             "daily_token_budget": llm.daily_token_budget,
-            "tokens_today": llm.tokens_spent_today(),
+            "tokens_today": tokens_today,
         },
         # Editable modes come later; every kind needs approval in v1.
         "modes": {str(kind): str(mode) for kind, mode in DEFAULT_MODES.items()},

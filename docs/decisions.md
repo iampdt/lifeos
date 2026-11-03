@@ -99,4 +99,7 @@ replaced. Dates are when the decision was made.
 | I38 | Generic habits | In the habits data source every checkbox is a habit and every number a metric, with optional units and descriptions; the check-in's output schema is built from them per workspace |
 | I39 | Optional modules | Only Tasks is required. Week and month links, Inbox and cancelled statuses, priority, habits, goals and reading are used where mapped and skipped otherwise |
 | I40 | Onboarding | Suggestions come from names and property types only and are always shown for confirmation; the saved mapping is checked against the live data sources. A starter template whose names the suggestions match completely makes setup a review |
+| I41 | AI per account | Own key first, then the service key within a per-account daily allowance and the overall cap, then rules. Usage is counted in Postgres per UTC day, so a restart of the free host doesn't reset anyone's allowance |
+| I42 | Free-tier consent | The service key sends an account's data only after it agrees to a versioned disclosure of the Gemini free-tier terms; a changed disclosure asks again. Own keys follow the key owner's own terms |
+| I43 | Own keys | Checked with Google before saving (a refused key is a 400 naming the key, or 401/403; quota isn't the key's fault), stored encrypted, shown only as the last four characters |
 
