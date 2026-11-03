@@ -169,6 +169,12 @@ An account's use of AI. The deployment owner uses the service's key: `GET /ai` r
 | `PUT /ai/key` | Body `{key}`. Browser sessions only. Checked with Google, then stored encrypted. 422 `key_rejected`, 503 `key_check_failed` (retryable), 404 `own_keys_unavailable` without `LIFEOS_ENCRYPTION_KEY` |
 | `DELETE /ai/key` | Remove the stored key |
 
+### Reports
+
+| Method and path | Description |
+| --- | --- |
+| `GET /reports/usage?days=30` | From the account's own runs (1–365 days): `{days, totals, workflows: {name: summary}, by_day: {date: {runs, tokens}}, models}`; a summary is `{runs, statuses, success_rate, llm_calls, input_tokens, output_tokens, llm_latency_ms: {p50, p95}, duration_ms: {p50}}` |
+
 ### Schedule
 
 | Method and path | Description |

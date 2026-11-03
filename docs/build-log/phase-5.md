@@ -14,3 +14,15 @@ Phase 5a (the evaluation set) is in [evals/](../evals/README.md). This log cover
 | Check | Result |
 | --- | --- |
 | Backend tests | 259 passed. New: which month is reviewed; scheduled on the 1st only; a full run on the owner-style layout (metrics, the weekly review and goal progress in the prompt, reference codes replaced by titles, at most three focus items, the month closed with the review, goal notes and the owner's note, next month's page created, tasks untouched); the review from the numbers without a model |
+
+## Usage and latency reports (2026-11-03)
+
+| Piece | Purpose |
+| --- | --- |
+| `GET /reports/usage` | From the account's own runs: outcomes per routine, AI calls and tokens, median and 95th-percentile model time per run, wall time of finished runs, runs and tokens per day, models used |
+| `/activity` | The report for the last 7, 30 or 90 days, with the recent runs |
+
+| Check | Result |
+| --- | --- |
+| Backend tests | 260 passed. New: counts, success rate, latency percentiles, durations, per-day totals and models from a mix of runs; runs outside the window and another account's runs are left out |
+

@@ -252,3 +252,22 @@ export type AIView = {
   own_key?: { available: boolean; hint: string | null; status: string | null; tokens_today: number };
 };
 
+export type UsageSummary = {
+  runs: number;
+  statuses: Record<string, number>;
+  success_rate: number | null;
+  llm_calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  llm_latency_ms: { p50: number | null; p95: number | null };
+  duration_ms: { p50: number | null };
+};
+
+export type UsageReport = {
+  days: number;
+  totals: UsageSummary;
+  workflows: Record<string, UsageSummary>;
+  by_day: Record<string, { runs: number; tokens: number }>;
+  models: Record<string, number>;
+};
+

@@ -349,6 +349,9 @@ Productivity records stay in Notion. Postgres holds only state LifeOS owns. Migr
 - Limits: 30 s per model call, 6 steps and 90 s per chat turn, a daily token budget.
 - `agent_runs` records per-run tokens, latency, model and status; `action_executions` records
   every write attempt; the audit log records every decision and outcome.
+- `GET /api/v1/reports/usage` turns an account's runs into a report (runs and outcomes per
+  routine, AI calls and tokens, median and 95th-percentile model time per run, runs and tokens
+  per day), shown on the Activity page.
 - `GET /api/v1/health` (liveness) and `GET /api/v1/health/ready` (database).
 - Free-tier hosts sleep: the database pool pings connections before use, and scheduled jobs
   wake the API before calling it.
@@ -361,6 +364,7 @@ Productivity records stay in Notion. Postgres holds only state LifeOS owns. Migr
 | `/` Command Center | Today's tasks and major-task count, evening check-in and morning briefing, recent runs, streaming chat, approvals drawer |
 | `/weekly` | Weekly review: metrics, draft review, decisions, Inbox triage, the owner's note, approval |
 | `/settings` | Write switch, timezone, permission modes, model chains and tokens used, Notion connection and drift, account |
+| `/activity` | Runs and outcomes per routine, AI calls, tokens and model time, runs per day, recent runs |
 | `/privacy`, `/terms` | Public privacy policy and terms of use |
 | `/setup` | Onboarding for an account's own workspace: a database per module, a property per field, status meanings, habits and metrics, rules |
 
@@ -419,8 +423,7 @@ a Notion account:
   pages (pgvector) with cited answers.
 - **Goal and learning specialists**, and an optional `goal.set_current` action.
 - **Editable settings:** permission modes and schedules from the UI.
-- **Quality bar:** latency and cost reports from `agent_runs`; more evaluation suites (weekly
-  review, chat tool use).
+- **Quality bar:** more evaluation suites (weekly and monthly review, chat tool use).
 - **Multi-user:** sign-up, Notion OAuth per user, per-user data, onboarding from a Notion
   template, paid model and hosting tiers.
 - Refuse writes to a data source whose schema has drifted (today drift is reported, not enforced).
