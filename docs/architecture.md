@@ -1,9 +1,10 @@
 # Architecture
 
 LifeOS is a chief of staff for a personal productivity system that lives in Notion. It reads
-the workspace, runs the daily and weekly routines (evening check-in, morning briefing, Sunday
-review), and proposes changes. **Nothing is written to Notion until the owner approves it**, and
-every write is verified and recorded in an append-only audit log.
+the workspace, runs the routines (evening check-in, morning briefing, weekly and monthly
+reviews), answers questions, and proposes changes. **Nothing is written to Notion until the
+owner approves it** (or, for a few kinds the owner chooses, applied with an undo), and every
+write is verified and recorded in an append-only audit log.
 
 Design rationale for each choice is in [decisions.md](decisions.md); endpoints are in
 [api.md](api.md).
@@ -20,9 +21,10 @@ Design rationale for each choice is in [decisions.md](decisions.md); endpoints a
 **Non-goals**
 
 - Replacing Notion, mirroring it into Postgres, or adding Notion databases.
-- Autonomous changes: in v1 every write needs approval.
-- Multi-user SaaS in v1: one owner, one workspace. Phase 9 opens it to more accounts
-  ([multi-user.md](multi-user.md)); data is already separated per account.
+- Autonomous changes: everything that moves, cancels, creates or closes work needs approval;
+  only numbers the owner reported can apply automatically, with an undo (§6.3).
+- A hosted product: accounts are separated (Phase 9, [multi-user.md](multi-user.md)), but it
+  runs on free tiers for a small number of people.
 
 ## 2. System overview
 
@@ -45,9 +47,10 @@ cookie is first-party. Scheduled jobs call the backend directly with a signed re
 | --- | --- |
 | `api/` | FastAPI app and routes, request guard (session + CSRF, or bearer token), signed cron endpoint, error shape |
 | `auth/` | Google sign-in (OpenID Connect), account linking, argon2id passwords, server-side sessions, login rate limiter |
-| `workflows/` | LangGraph graphs (`evening.py`, `morning.py`, `weekly.py`), the run manager, the two-phase proposal builder, per-account contexts (`contexts.py`) |
+| `workflows/` | LangGraph graphs (`evening.py`, `morning.py`, `weekly.py`, `monthly.py`), the run manager, the two-phase proposal builder, per-account contexts (`contexts.py`) |
 | `workspaces/` | Module catalogue and mapping validation, onboarding suggestions, saved account workspaces |
-| `agents/` | Specialists: `planner`, `checkin`, `reviewer`, `chat`. Each is a prompt, an output schema and validation |
+| `agents/` | Specialists: `planner`, `checkin`, `reviewer`, `monthly`, `goals`, `knowledge`, `chat`. Each is a prompt, an output schema and validation |
+| `knowledge/` | The knowledge index: Notion blocks to passages, embeddings, hybrid search |
 | `execution/` | Action kinds and payloads, proposal lifecycle, executor, audit log |
 | `permissions/` | Field-level write allowlist and per-kind permission modes |
 | `services/` | Domain rules, calendar (weeks, months, timezone), period lookup, prompt-safe context |
@@ -59,7 +62,7 @@ cookie is first-party. Scheduled jobs call the backend directly with a signed re
 ### Frontend (`frontend/src`)
 
 Next.js App Router with Cache Components, Tailwind CSS, shadcn/ui on Base UI, and TanStack
-Query. Pages: sign-in, Command Center, Weekly review, Settings (see §11).
+Query. Pages are listed in §11.
 
 ## 3. Notion integration
 
@@ -457,7 +460,7 @@ owner's timezone.
 | API | Auth, CSRF, sessions, rate limit, approvals, chat streaming, cron signatures, production settings | Local Postgres |
 | Live | Read checks on the real workspace; write checks only on a sandbox copy | Notion |
 | Frontend | Lint, type check, production build; end-to-end runs in a browser against the sandbox | Local stack |
-| Evaluation | Accuracy of check-in parsing and day planning per model on a synthetic labelled set, including prompt-injection cases ([evals](evals/README.md)) | Gemini, on demand |
+| Evaluation | Accuracy of check-in parsing, day planning, knowledge answers and goal notes per model on a synthetic labelled set, including prompt-injection cases ([evals](evals/README.md)) | Gemini, on demand |
 
 No test writes to the real workspace. CI runs everything except the live tests.
 
