@@ -86,7 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
       {settings.data?.demo && <DemoBanner />}
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-        {noWorkspace && pathname !== "/settings" ? <NoWorkspace /> : children}
+        {noWorkspace && !["/settings", "/setup"].includes(pathname) ? <NoWorkspace /> : children}
       </main>
     </div>
   );
@@ -101,7 +101,7 @@ function NoWorkspace() {
         <CardTitle>No Notion workspace yet</CardTitle>
         <CardDescription>
           {connected
-            ? "Your Notion is connected. Choosing which of its databases LifeOS works with comes next."
+            ? "Your Notion is connected. Next, tell LifeOS which of its databases to use."
             : notion.data?.available
               ? "Your account is set up. Connect your Notion workspace to get started."
               : "Your account is set up, but it isn't connected to a Notion workspace, so there's nothing to plan or review yet. Connecting your own workspace is coming soon."}
@@ -110,6 +110,9 @@ function NoWorkspace() {
       <CardContent className="flex flex-col items-start gap-3 text-sm text-muted-foreground">
         {notion.data?.available && !connected && (
           <a href="/api/v1/notion/connect" className={buttonVariants()}>Connect Notion</a>
+        )}
+        {connected && (
+          <Link href="/setup" className={buttonVariants()}>Set up your workspace</Link>
         )}
         <p>
           You can delete your account at any time in{" "}

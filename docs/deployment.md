@@ -117,7 +117,10 @@ Lets accounts connect their own Notion workspace (multi-user step 9.3).
    submitted; LifeOS builds the same URL from the client ID.
 3. From the **Configuration** tab, set `NOTION_OAUTH_CLIENT_ID` and `NOTION_OAUTH_CLIENT_SECRET`
    on Render (dashboard).
-4. Generate an encryption key and set it as `LIFEOS_ENCRYPTION_KEY` on Render:
+4. Optionally, build the [starter template](template.md) on a public Notion page and enter its
+   URL as the connection's template (Configuration → Basic information → "Notion URL for
+   optional template"). New users can then duplicate it while connecting.
+5. Generate an encryption key and set it as `LIFEOS_ENCRYPTION_KEY` on Render:
    `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
    Keep a copy somewhere safe: without it, stored tokens can't be read and every account has to
    connect again. To rotate it, set `new_key,old_key`.

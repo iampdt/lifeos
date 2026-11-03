@@ -51,3 +51,26 @@ Design: [multi-user.md](../multi-user.md). This log grows with each step.
 | --- | --- |
 | Backend tests | 215 passed. New: encryption round trip, rotation, wrong key and tampering; the flow against a fake Notion (authorisation URL, encrypted storage, single-use and expiring attempts, cancel, bad code, a callback from another account's attempt, no session, not configured); pagination of visible databases; refresh with rotation, three concurrent requests refreshing once, a refused refresh marking `needs_reconnect` and reconnecting, an outage leaving the connection usable, refresh ahead of a stated expiry; disconnect revoking; account deletion revoking and removing the connection |
 | Local stack in the browser | With a local stand-in for Notion's endpoints: **Connect Notion** → consent redirect → back through the web app's proxy → Settings showing the workspace and its five databases; tokens stored as ciphertext; **Disconnect** revoked the token and reset the card |
+
+## 9.4 Generic workspace model (2026-11-03)
+
+| Piece | Purpose |
+| --- | --- |
+| Mappings as data | `DataSourceSpec` serves both the owner's YAML and accounts' saved mappings (`workspaces` table, migrations 0007–0008) |
+| `app/workspaces/modules.py` | The module catalogue: Tasks required; Habits, Weekly and Monthly reviews, Goals, Reading optional; allowed property types and the status meanings each field must or may map |
+| Generic habits | Every checkbox in the habits data source is a habit and every number a metric (unit, description); the day from a date property or the title in the mapping's format. `Scorecard` drives the check-in schema, the review, chat and the web form |
+| Optional modules | Workflows, queries and writes use only what is mapped: no week/month links, Inbox, cancelled status, priority or habits where a workspace has none |
+| Per-account rules | Major tasks a day (R1), timezone, review day and time |
+| Account contexts | A connected account with a saved mapping gets its own workflow dependencies and Notion client |
+| `app/workspaces/suggest.py` | Onboarding suggestions: databases by title, properties by type and name, status meanings by the longest matching phrase, priority order, habits and metric units, title date formats |
+| API | `GET/PUT /workspace`, `GET /workspace/modules`, `GET /workspace/suggestion`, `GET /workspace/data-sources/{id}` |
+| Web app | `/setup`; the check-in form, proposal cards and settings show whatever the workspace tracks |
+| [Starter template](../template.md) | A layout the suggestions map completely |
+
+| Check | Result |
+| --- | --- |
+| Backend tests | 231 passed. New: a workspace with Notion's default statuses, a date-based habits table, its own habits and metrics, and no weekly, monthly, goal or reading databases runs the check-in (writes verified), the weekly review and the morning briefing; the daily limit comes from the workspace; a saved mapping is refused with every problem (structure, live schema, unshared database, timezone); onboarding with the suggestion as is gives a working workspace through the account's own client; the owner's layout is mapped in full from names alone; status meanings, priority order, unit guesses and date formats |
+| Evaluation | After the check-in schema became per-workspace: `gemini-3.5-flash-lite` 17/17 (both injection cases included); `gemini-3.1-flash-lite` 9/9 answered, 8 provider errors (overload) |
+| Production after part 1 | The demo's check-in lists habits and metrics with units, records `metrics`, and verifies the write |
+| Local walkthrough | Through the web app's proxy against a stand-in Notion: connect → suggestion (all three databases, status meanings, priorities, habits with units) → save → tasks listed and a check-in verified. The setup page itself wasn't checked visually (the browser extension wasn't available) |
+

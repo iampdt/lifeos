@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDay, humanize } from "@/lib/format";
+import { nativeSelect } from "@/lib/styles";
 import type { ApprovalRequest, DecisionsRequest, QuestionRequest, RunView } from "@/lib/types";
 
 type Props = { run: RunView; pending: boolean; onAnswer: (answer: unknown) => void };
@@ -164,9 +165,6 @@ function QuestionStep({ request, onAnswer }: { request: QuestionRequest; onAnswe
 
 type OverdueChoice = { decision: string; due: string };
 type InboxChoice = { action: string; due: string };
-
-const nativeSelect =
-  "h-8 rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
 
 export function DecisionsStep({ request, onAnswer }: { request: DecisionsRequest; onAnswer: (a: unknown) => void }) {
   const [overdue, setOverdue] = useState<Record<string, OverdueChoice>>(

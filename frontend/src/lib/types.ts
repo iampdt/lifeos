@@ -171,3 +171,45 @@ export type DataSourceList = {
   data_sources: { id: string; title: string; database_id: string | null; url: string | null }[];
   truncated: boolean;
 };
+
+// --- workspace setup (onboarding) ---------------------------------------------------------
+
+export type FieldRule = { types: string[]; required: boolean; needs: string[]; allows: string[] };
+export type ModuleCatalogue = Record<
+  string,
+  { label: string; required: boolean; free_fields: boolean; fields: Record<string, FieldRule> }
+>;
+export type SchemaProperty = { name: string; type: string; options: string[] };
+export type DataSourceSchema = { title: string; properties: SchemaProperty[] };
+export type PropertyMapping = {
+  name: string;
+  type: string;
+  values?: Record<string, string>;
+  description?: string | null;
+  unit?: string | null;
+};
+export type ModuleMapping = {
+  data_source_id: string;
+  database_id?: string | null;
+  properties: Record<string, PropertyMapping>;
+  date_format?: string | null;
+};
+export type WorkspaceSettingsView = {
+  timezone: string;
+  max_major_per_day: number;
+  review_weekday: number;
+  review_time: string;
+};
+export type WorkspaceView = {
+  source: "environment" | "account" | null;
+  editable: boolean;
+  modules: Record<string, ModuleMapping>;
+  settings: WorkspaceSettingsView | null;
+};
+export type WorkspaceSuggestion = {
+  data_sources: { id: string; title: string }[];
+  modules: Record<string, ModuleMapping>;
+  schemas: Record<string, DataSourceSchema>;
+  from_template: boolean;
+};
+

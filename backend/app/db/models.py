@@ -22,7 +22,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSON, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -218,8 +218,9 @@ class Workspace(Base):
     __tablename__ = "workspaces"
 
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
-    # Module name → DataSourceSpec as JSON (app/workspaces/store.py).
-    mapping: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    # Module name → DataSourceSpec as JSON (app/workspaces/store.py). `json`, not `jsonb`, so
+    # habits and fields keep the order the account set them up in.
+    mapping: Mapped[dict[str, Any]] = mapped_column(JSON)
     timezone: Mapped[str] = mapped_column(String(64))
     max_major_per_day: Mapped[int] = mapped_column(Integer, default=3)  # R1
     # When the weekly review is due (used by per-account scheduling): Monday is 0.

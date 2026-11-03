@@ -46,7 +46,7 @@ cookie is first-party. Scheduled jobs call the backend directly with a signed re
 | `api/` | FastAPI app and routes, request guard (session + CSRF, or bearer token), signed cron endpoint, error shape |
 | `auth/` | Google sign-in (OpenID Connect), account linking, argon2id passwords, server-side sessions, login rate limiter |
 | `workflows/` | LangGraph graphs (`evening.py`, `morning.py`, `weekly.py`), the run manager, the two-phase proposal builder, per-account contexts (`contexts.py`) |
-| `workspaces/` | Module catalogue and mapping validation, saved account workspaces |
+| `workspaces/` | Module catalogue and mapping validation, onboarding suggestions, saved account workspaces |
 | `agents/` | Specialists: `planner`, `checkin`, `reviewer`, `chat`. Each is a prompt, an output schema and validation |
 | `execution/` | Action kinds and payloads, proposal lifecycle, executor, audit log |
 | `permissions/` | Field-level write allowlist and per-kind permission modes |
@@ -338,7 +338,8 @@ Productivity records stay in Notion. Postgres holds only state LifeOS owns. Migr
 | `/login` | Sign-in |
 | `/` Command Center | Today's tasks and major-task count, evening check-in and morning briefing, recent runs, streaming chat, approvals drawer |
 | `/weekly` | Weekly review: metrics, draft review, decisions, Inbox triage, the owner's note, approval |
-| `/settings` | Write switch, timezone, permission modes, model chains and tokens used, Notion connection and drift |
+| `/settings` | Write switch, timezone, permission modes, model chains and tokens used, Notion connection and drift, account |
+| `/setup` | Onboarding for an account's own workspace: a database per module, a property per field, status meanings, habits and metrics, rules |
 
 Approval cards show before → after for each kind. Selecting a move also selects the page it
 depends on, and cancelling a task needs an explicit tick. Pages render immediately with their

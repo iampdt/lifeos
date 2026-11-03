@@ -98,4 +98,5 @@ replaced. Dates are when the decision was made.
 | I37 | Connection attempts | Tied to the account that started them, checked against the session on return, so a forged callback can't attach a workspace to someone else's account |
 | I38 | Generic habits | In the habits data source every checkbox is a habit and every number a metric, with optional units and descriptions; the check-in's output schema is built from them per workspace |
 | I39 | Optional modules | Only Tasks is required. Week and month links, Inbox and cancelled statuses, priority, habits, goals and reading are used where mapped and skipped otherwise |
+| I40 | Onboarding | Suggestions come from names and property types only and are always shown for confirmation; the saved mapping is checked against the live data sources. A starter template whose names the suggestions match completely makes setup a review |
 

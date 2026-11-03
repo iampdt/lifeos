@@ -19,10 +19,17 @@ from sqlalchemy.dialects.postgresql import insert
 from app.api.errors import ApiError
 from app.api.security import CurrentUser, services
 from app.db.models import NotionConnection, Workspace
+from app.notion.codecs import plain_text
 from app.notion.errors import NotionNotShared, NotionUnauthorized
 from app.notion.schema import check_data_source
 from app.workspaces.modules import MODULES, MappingIssue, validate_mapping
 from app.workspaces.store import mapping_json, specs_from_mapping
+from app.workspaces.suggest import (
+    describe_schema,
+    detect_date_format,
+    suggest_module,
+    suggest_sources,
+)
 
 router = APIRouter()
 
@@ -141,6 +148,95 @@ async def save_workspace(
         )  # fmt: skip
     await svc.contexts.forget(principal.user_id)
     return await get_workspace(request, principal)
+
+
+# --- onboarding suggestions -------------------------------------------------------------------
+
+MAX_SOURCES = 200
+
+
+async def _account_client(request: Request, principal):
+    svc = services(request)
+    if principal.is_owner:
+        raise ApiError(403, "environment_workspace", "this workspace is set in the environment")
+    if svc.connections is None:
+        raise ApiError(404, "http_error", "Not Found")
+    async with svc.session_factory() as db:
+        connection = await db.get(NotionConnection, principal.user_id)
+    if connection is None or connection.status != "active":
+        raise ApiError(409, "notion_reconnect", "connect Notion first")
+    return svc.connections.client(principal.user_id), connection
+
+
+@router.get("/workspace/suggestion")
+async def suggestion(request: Request, principal: CurrentUser) -> dict[str, Any]:
+    """A first guess at the whole mapping, from the databases the connection can see."""
+    client, connection = await _account_client(request, principal)
+    try:
+        sources: list[dict[str, str]] = []
+        async for item in client.search_data_sources():
+            sources.append({"id": item["id"], "title": plain_text(item.get("title")) or "Untitled"})
+            if len(sources) == MAX_SOURCES:
+                break
+        modules: dict[str, Any] = {}
+        schemas: dict[str, Any] = {}
+        for module, source_id in suggest_sources(sources).items():
+            if source_id:
+                modules[module], schemas[source_id] = await _suggest_for(client, module, source_id)
+    except NotionUnauthorized as exc:
+        raise ApiError(409, "notion_reconnect", "connect Notion again to continue") from exc
+    finally:
+        await client.aclose()
+    return {
+        "data_sources": sources,
+        "modules": modules,
+        "schemas": schemas,
+        "from_template": connection.duplicated_template_id is not None,
+    }
+
+
+@router.get("/workspace/data-sources/{source_id}")
+async def data_source_suggestion(
+    source_id: str, module: str, request: Request, principal: CurrentUser
+) -> dict[str, Any]:
+    """One database's properties, and a guess at mapping `module` onto it."""
+    if module not in MODULES:
+        raise ApiError(404, "unknown_module", f"no module {module!r}")
+    client, _ = await _account_client(request, principal)
+    try:
+        suggested, schema = await _suggest_for(client, module, source_id)
+    except NotionNotShared as exc:
+        raise ApiError(404, "not_shared", "LifeOS can't see this database") from exc
+    except NotionUnauthorized as exc:
+        raise ApiError(409, "notion_reconnect", "connect Notion again to continue") from exc
+    finally:
+        await client.aclose()
+    return {"suggestion": suggested, "schema": schema}
+
+
+async def _suggest_for(client, module: str, source_id: str) -> tuple[dict, dict]:
+    data_source = await client.get_data_source(source_id)
+    properties = describe_schema(data_source)
+    entry: dict[str, Any] = {
+        "data_source_id": source_id,
+        "database_id": (data_source.get("parent") or {}).get("database_id"),
+        **suggest_module(module, properties),
+    }
+    if module == "habits" and "day" not in entry["properties"]:
+        entry["date_format"] = detect_date_format(await _sample_titles(client, source_id))
+    schema = {"title": plain_text(data_source.get("title")) or "Untitled", "properties": properties}
+    return entry, schema
+
+
+async def _sample_titles(client, source_id: str, limit: int = 5) -> list[str]:
+    titles: list[str] = []
+    async for page in client.query_data_source(source_id, page_size=limit):
+        for prop in (page.get("properties") or {}).values():
+            if prop.get("type") == "title":
+                titles.append(plain_text(prop.get("title")))
+        if len(titles) >= limit:
+            break
+    return titles
 
 
 async def _live_issues(svc, user_id, specs) -> list[MappingIssue]:

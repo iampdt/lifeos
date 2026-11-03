@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { toast } from "sonner";
@@ -65,6 +66,9 @@ export function NotionConnectionCard({ owner }: { owner: boolean }) {
         )}
         {active && <DataSources />}
         <div className="flex flex-wrap gap-2">
+          {active && !owner && (
+            <Link href="/setup" className={buttonVariants()}>Choose databases</Link>
+          )}
           {/* A full-page navigation: the API redirects to Notion's consent page. */}
           <a
             href="/api/v1/notion/connect"
@@ -116,8 +120,7 @@ function DataSources() {
     <div>
       <p className="mb-1.5 text-muted-foreground">
         LifeOS can see {sources.length}
-        {list.data.truncated ? "+" : ""} database{sources.length === 1 ? "" : "s"}. Choosing which
-        ones it works with comes next.
+        {list.data.truncated ? "+" : ""} database{sources.length === 1 ? "" : "s"}.
       </p>
       <div className="flex flex-wrap gap-1.5">
         {sources.slice(0, SHOWN).map((source) => (

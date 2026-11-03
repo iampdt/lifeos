@@ -7,6 +7,8 @@ export class ApiError extends Error {
     public code: string,
     message: string,
     public retryable = false,
+    /** More about the error, e.g. every problem found in a workspace mapping. */
+    public details: unknown = undefined,
   ) {
     super(message);
   }
@@ -26,7 +28,9 @@ function headers(method: string, hasBody: boolean): Record<string, string> {
 }
 
 async function toError(response: Response): Promise<ApiError> {
-  let body: { error?: { code?: string; message?: string; retryable?: boolean } } | undefined;
+  let body:
+    | { error?: { code?: string; message?: string; retryable?: boolean; details?: unknown } }
+    | undefined;
   try {
     body = await response.json();
   } catch {
@@ -38,6 +42,7 @@ async function toError(response: Response): Promise<ApiError> {
     error?.code ?? "http_error",
     error?.message ?? response.statusText,
     error?.retryable ?? false,
+    error?.details,
   );
 }
 

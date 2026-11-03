@@ -149,6 +149,8 @@ owner's workspace comes from the environment and is read-only here.
 | --- | --- |
 | `GET /workspace/modules` | What each module needs: fields, allowed property types, required ones, and the meanings a status field must or may map (`needs`, `allows`) |
 | `GET /workspace` | `{source, editable, modules, settings}`; `source` is `environment`, `account` or null (not set up yet) |
+| `GET /workspace/suggestion` | A first guess at the whole mapping: `{data_sources, modules, schemas, from_template}`, from the databases the connection can see (names and types only) |
+| `GET /workspace/data-sources/{id}?module=` | One database's properties (`schema`) and a guess at mapping the module onto it (`suggestion`); 404 `not_shared` when the connection can't see it |
 | `PUT /workspace` | Body `{modules, settings}`, with `settings` `{timezone, max_major_per_day, review_weekday, review_time}`. Checked structurally and then against the live data sources; problems come back as 422 `invalid_mapping` with every one in `error.details`. The owner's environment workspace answers 403 `environment_workspace` |
 
 ### Notion connection

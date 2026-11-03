@@ -73,15 +73,21 @@ tasks, with nothing in the code that only makes sense for one person's setup.
 | Goals | No | title, status, optional current and target |
 | Reading | No | title, status, optional pages and pages read |
 
-- **Template users** get the mapping automatically from the duplicated template.
-- **Existing workspaces** go through onboarding: LifeOS lists the databases shared with it,
-  suggests a database per module and a property per field (by type and name), and asks which
-  status options mean *to do*, *in progress*, *done* and *dropped*, and how priorities sort. The
-  user confirms or adjusts.
+- **Onboarding** (`/setup`): LifeOS lists the databases shared with it, suggests a database
+  per module and a property per field (by type and name), and classifies each status option
+  (*to do*, *in progress*, *done*, *cancelled*, …, matching the longest phrase, so "Not started"
+  is *to do*). Priorities are ordered highest first. In Habits, every checkbox and number is
+  offered as a habit or metric, with a unit guessed from the name; without a date property, the
+  title's date format is detected from a few rows. The user confirms or adjusts; saving checks
+  the mapping structurally and then against the live data sources, and reports every problem.
+- **Template users** duplicate a [starter template](template.md) whose names the suggestions
+  match completely, so they only review and save. Tests check that this layout is mapped in
+  full from names alone.
 - **Per-user rules:** timezone, the daily limit of major tasks (default 3), and review day and
   time. Rule IDs stay; their parameters come from the user's settings.
-- **Schema drift** is checked at onboarding and daily. A module whose mapping no longer matches
-  is paused, with a notice and a link back to onboarding, and the executor refuses writes to it.
+- **Schema drift** is checked when a mapping is saved. Checking it daily, and pausing a module
+  whose mapping no longer matches, comes with per-user scheduling (9.6); until then a mismatch
+  surfaces as a failed run or write, and the setup screen shows what changed when saved again.
 
 ## AI under free tier
 
@@ -132,7 +138,7 @@ whose local time has reached a scheduled routine that hasn't run today, the API 
 | 9.1 | Google sign-in and account linking; passwords only where Google isn't configured | Done |
 | 9.2 | Multi-tenancy: `user_id` everywhere, per-account contexts, isolation tests, delete account | Done |
 | 9.3 | Notion OAuth connect, encrypted tokens with refresh, disconnect | Done |
-| 9.4 | Generic workspace model: modules, mappings, onboarding UI, template, generic habits, per-user rules | In progress: generic engine and saved mappings done |
+| 9.4 | Generic workspace model: modules, mappings, onboarding UI, template, generic habits, per-user rules | Done |
 | 9.5 | AI allowance, own-key option, disclosure and consent | |
 | 9.6 | Per-user scheduling | |
 | 9.7 | Privacy and terms pages, Notion review submission, the owner's migration to the new flow, rollout | |

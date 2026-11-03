@@ -271,3 +271,28 @@ async def test_the_owners_environment_workspace_is_read_only(session_factory):
         assert catalogue["tasks"]["fields"]["status"]["needs"] == ["next", "done"]
     async with services.session_factory() as db:
         assert (await db.scalars(select(Workspace))).all() == []
+
+
+async def test_onboarding_with_the_suggestion_as_is_gives_a_working_workspace(account):
+    client, _, fake = account
+    proposal = (await client.get("/api/v1/workspace/suggestion")).json()
+    assert {s["title"] for s in proposal["data_sources"]} == {"Tasks", "Habits"}
+    assert set(proposal["modules"]) == {"tasks", "habits"}
+    tasks = proposal["modules"]["tasks"]["properties"]
+    assert tasks["status"]["values"] == {"next": "Not started", "doing": "In progress",
+                                         "done": "Done"}  # fmt: skip
+    habits = proposal["modules"]["habits"]["properties"]
+    assert habits["day"]["name"] == "Date" and habits["steps"]["unit"] == "steps"
+    assert {"meditate", "walk"} <= set(habits)
+    assert proposal["schemas"]["ds-todo"]["title"] == "Tasks"
+
+    body = {"modules": proposal["modules"], "settings": {"timezone": "Asia/Kolkata"}}
+    saved = await client.put("/api/v1/workspace", json=body)
+    assert saved.status_code == 200, saved.text
+    assert (await client.get("/api/v1/auth/me")).json()["workspace"] is True
+
+    one = await client.get("/api/v1/workspace/data-sources/ds-days", params={"module": "habits"})
+    assert one.json()["suggestion"]["properties"]["day"]["name"] == "Date"
+    assert {p["name"] for p in one.json()["schema"]["properties"]} >= {"Meditate", "Steps"}
+    missing = await client.get("/api/v1/workspace/data-sources/nope", params={"module": "tasks"})
+    assert missing.status_code == 404 and missing.json()["error"]["code"] == "not_shared"
