@@ -223,9 +223,17 @@ class Workspace(Base):
     mapping: Mapped[dict[str, Any]] = mapped_column(JSON)
     timezone: Mapped[str] = mapped_column(String(64))
     max_major_per_day: Mapped[int] = mapped_column(Integer, default=3)  # R1
-    # When the weekly review is due (used by per-account scheduling): Monday is 0.
+    # Scheduled routines, local to `timezone`: the weekly review's day (Monday is 0) and times.
     review_weekday: Mapped[int] = mapped_column(Integer, default=6)
     review_time: Mapped[str] = mapped_column(String(5), default="18:00")
+    morning_time: Mapped[str] = mapped_column(String(5), default="07:30")
+    evening_time: Mapped[str] = mapped_column(String(5), default="21:00")
+    schedule_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # The daily drift check: modules whose data source no longer matches the mapping are paused
+    # (left out of the workspace) until the mapping is saved again.
+    paused_modules: Mapped[list[str]] = mapped_column(JSON, default=list)
+    drift: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

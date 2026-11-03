@@ -90,3 +90,18 @@ Design: [multi-user.md](../multi-user.md). This log grows with each step.
 | Backend tests | 239 passed. New: no consent and no key means rules, with the reason; consent uses the service key until the allowance runs out; an own key comes first and doesn't touch the allowance; a refused key is marked and the allowance takes over; an own key out of quota falls back for that call; keys are checked first and stored encrypted; the API's consent versioning, key errors, owner refusal and account deletion |
 | Against Google, with the service key | The real key passed the check; a made-up key was refused (400 `INVALID_ARGUMENT`) and classified as rejected; a call routed through an account's own key (stored encrypted in a throwaway database) answered with `gemini-3.5-flash-lite` and was counted as own-key usage, not allowance |
 
+## 9.6 Per-account scheduling (2026-11-03)
+
+| Piece | Purpose |
+| --- | --- |
+| `app/workflows/schedule.py` | When each account's routines are due: own timezone, four-hour window within the local day, the review's weekday |
+| `POST /internal/cron/tick` | Expire stale proposals, run each connected account's daily drift check, start due routines (oldest first, capped, time-boxed); a failed run frees its slot |
+| `app/workspaces/drift.py` | The daily drift check: modules that no longer match are paused and left out of the account's workspace until the mapping is saved again |
+| Migration 0010 | `workspaces`: morning and evening times, routines on or off, paused modules, drift, last check |
+| `.github/workflows/cron.yml` | One hourly schedule (minute 30) calling the tick; manual runs default to the tick |
+| Web app | Routine times and an on/off switch in setup; a notice on every page when something is paused |
+
+| Check | Result |
+| --- | --- |
+| Backend tests | 250 passed. New: due windows, local midnight, the review's weekday, other timezones and disabled schedules; a tick runs the owner's weekly review (Asia/Kolkata) and another account's morning briefing (New York) once each; the cap leaves the rest for the next tick; a failed run is retried by a later tick; accounts with routines off or a lost connection aren't scheduled; renaming properties in the (HTTP-backed) workspace pauses Habits while the rest keeps working, pausing Tasks removes the workspace, and saving the setup again restores it |
+

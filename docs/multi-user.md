@@ -85,9 +85,10 @@ tasks, with nothing in the code that only makes sense for one person's setup.
   full from names alone.
 - **Per-user rules:** timezone, the daily limit of major tasks (default 3), and review day and
   time. Rule IDs stay; their parameters come from the user's settings.
-- **Schema drift** is checked when a mapping is saved. Checking it daily, and pausing a module
-  whose mapping no longer matches, comes with per-user scheduling (9.6); until then a mismatch
-  surfaces as a failed run or write, and the setup screen shows what changed when saved again.
+- **Schema drift** is checked when a mapping is saved, and daily by the tick. A module whose
+  data source no longer matches is paused: left out of the workspace (so nothing reads or writes
+  it) with a notice on every page and the problems on the setup screen, until the mapping is
+  saved again. If Tasks is paused, the account has no workspace until then.
 
 ## AI under free tier
 
@@ -129,9 +130,15 @@ tasks, with nothing in the code that only makes sense for one person's setup.
 
 ## Scheduling
 
-One GitHub Actions schedule every 30 minutes calls a signed `/internal/cron/tick`. For each user
-whose local time has reached a scheduled routine that hasn't run today, the API starts it
-(idempotent per user, routine and local date), up to a cap per tick so the free host keeps up.
+One GitHub Actions schedule calls a signed `/internal/cron/tick` every hour. For each account
+whose local time has reached a routine that hasn't run today, the API starts it (idempotent per
+account, routine and local date), the oldest first, up to a cap per tick so the free host keeps
+up; the rest wait for the next tick, within a four-hour window. Accounts set their own times and
+can turn the routines off; connected accounts with a lost connection aren't scheduled.
+
+Hourly rather than every 30 minutes keeps a private repository inside GitHub's free Actions
+minutes (each run bills at least a minute); with a public repository the schedule can be
+`0,30 * * * *`.
 
 ## Privacy and setup
 
@@ -152,5 +159,5 @@ whose local time has reached a scheduled routine that hasn't run today, the API 
 | 9.3 | Notion OAuth connect, encrypted tokens with refresh, disconnect | Done |
 | 9.4 | Generic workspace model: modules, mappings, onboarding UI, template, generic habits, per-user rules | Done |
 | 9.5 | AI allowance, own-key option, disclosure and consent | Done |
-| 9.6 | Per-user scheduling | |
+| 9.6 | Per-user scheduling, daily drift check | Done |
 | 9.7 | Privacy and terms pages, Notion review submission, the owner's migration to the new flow, rollout | |

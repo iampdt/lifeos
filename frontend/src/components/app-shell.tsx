@@ -10,6 +10,7 @@ import { DemoBanner } from "@/components/demo-banner";
 import { useSession, useSignOut } from "@/components/session";
 import { Badge } from "@/components/ui/badge";
 import { useNotionConnection } from "@/components/notion-connection";
+import { WorkspaceNotice } from "@/components/workspace-notice";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -85,6 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       {settings.data?.demo && <DemoBanner />}
+      <WorkspaceNotice />
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
         {noWorkspace && !["/settings", "/setup"].includes(pathname) ? <NoWorkspace /> : children}
       </main>

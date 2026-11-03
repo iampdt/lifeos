@@ -67,8 +67,9 @@ Repository → Settings → Secrets and variables → Actions → add:
 | `LIFEOS_API_URL` | The Render URL, without a trailing slash |
 | `LIFEOS_CRON_SECRET` | The value from Render |
 
-Run **Scheduled jobs** once from the Actions tab (`workflow_dispatch`, job `expire_proposals`) to
-check the signature. Without these secrets, scheduled runs are skipped with a notice.
+Run **Scheduled jobs** once from the Actions tab (`workflow_dispatch`, job `tick`) to check the
+signature. Without these secrets, scheduled runs are skipped with a notice. The schedule calls
+the tick every hour at minute 30; each account's routines start within an hour of their time.
 
 ### 6. Smoke test
 
@@ -174,9 +175,10 @@ in-memory sample workspace and no Notion connection (see architecture §13).
 | Behaviour | Effect | Handling |
 | --- | --- | --- |
 | Render sleeps after 15 minutes without traffic | The first request after idle takes about a minute | Scheduled jobs call `/health` first and retry; the web app shows loading states |
-| Render: 750 instance hours a month | Ample for one service that sleeps when idle | — |
+| Render: 750 instance hours a month | The hourly tick wakes the API for about 15 minutes each time: roughly 200 hours a month, plus use | — |
 | Neon scales to zero after 5 minutes | The first query after idle is slower | The connection pool pings before use |
-| Neon: 1 GB and 100 CU-hours a month | Well above what one owner's proposals and runs need | — |
-| GitHub Actions schedules can run late | Jobs may start minutes after the hour | Jobs run at most once per local day, whenever they arrive |
+| Neon: 1 GB and 100 CU-hours a month | Each tick keeps the database up about 5 minutes: roughly 20 CU-hours a month at the smallest size, plus use | — |
+| GitHub Actions schedules can run late | Ticks may start minutes late | Routines stay due for four hours and run at most once per local day |
+| GitHub Actions on a private repository: 2,000 minutes a month | Each tick bills at least a minute: about 730 a month hourly | Every 30 minutes only once the repository is public |
 | Public repositories: schedules are disabled after 60 days without activity | Scheduled jobs stop | Re-enable the workflow in the Actions tab |
 | Gemini free-tier limits change | Calls fail with 429 | The model chain falls back, then the rules take over |

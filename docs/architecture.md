@@ -196,16 +196,21 @@ Each fallback is named in the run's warnings. Chat reports that the AI is unavai
 
 ### 5.6 Scheduling
 
-GitHub Actions calls `POST /api/v1/internal/cron/{job}` with an HMAC signature (times in IST):
+Every hour GitHub Actions calls `POST /api/v1/internal/cron/tick` with an HMAC signature. The
+tick expires stale proposals, runs each account's daily drift check, and starts the routines due
+in each account's own timezone (`workflows/schedule.py`):
 
-| Time | Jobs |
+| Routine | When (defaults) |
 | --- | --- |
-| 07:30 daily | `expire_proposals`, then `morning_briefing` |
-| 21:00 daily | `evening_checkin` (waits for the owner's answer) |
-| 18:00 Sunday | `weekly_review` (waits for decisions) |
+| `morning_briefing` | Daily, 07:30 |
+| `evening_checkin` | Daily, 21:00 (waits for the answer) |
+| `weekly_review` | Sundays, 18:00 (waits for decisions) |
 
-Workflow jobs run for the owner account (per-account schedules come in Phase 9), at most once
-per local day (`cron_runs`). If a run fails, its slot is released so a retry can run.
+The owner's times come from settings (`LIFEOS_MORNING_TIME`, …) in `TIMEZONE`; every other
+account sets its own, or turns them off. A routine is due for four hours from its time, within
+the same local day, and runs at most once per account and local date (`cron_runs`); the oldest
+due routines run first, up to `LIFEOS_TICK_MAX_RUNS` per tick, and the rest wait for the next
+tick. A failed run frees its slot so a later tick retries it.
 
 ## 6. Actions, approvals and permissions
 
@@ -286,7 +291,7 @@ account (`user_id`), and every query filters on it.
 | `ai_access`, `ai_usage` | An account's agreement to the free-tier terms (with the disclosure version) and its own Gemini key (encrypted); tokens used per UTC day on the service key and on its own |
 | `workspaces` | An account's own mapping (module → data source and properties) and rule settings: timezone, major tasks a day, review day and time |
 | `notion_connections` | An account's Notion workspace connection: workspace, bot, access and refresh tokens (encrypted), status (`active` or `needs_reconnect`) |
-| `cron_runs` | One row per (account, job, local date) |
+| `cron_runs` | One row per (account, job, local date): scheduled routines and the daily drift check |
 | `checkpoint*` | LangGraph checkpoints, created and migrated by the checkpointer itself |
 
 Productivity records stay in Notion. Postgres holds only state LifeOS owns. Migrations are in

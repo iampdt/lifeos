@@ -34,11 +34,17 @@ from app.workspaces.suggest import (
 router = APIRouter()
 
 
+TIME = r"^([01]\d|2[0-3]):[0-5]\d$"
+
+
 class WorkspaceSettings(BaseModel):
     timezone: str = Field(max_length=64)
     max_major_per_day: int = Field(3, ge=1, le=10)
     review_weekday: int = Field(6, ge=0, le=6)  # Monday is 0
-    review_time: str = Field("18:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    review_time: str = Field("18:00", pattern=TIME)
+    morning_time: str = Field("07:30", pattern=TIME)
+    evening_time: str = Field("21:00", pattern=TIME)
+    schedule_enabled: bool = True
 
     @field_validator("timezone")
     @classmethod
@@ -86,9 +92,15 @@ async def get_workspace(request: Request, principal: CurrentUser) -> dict[str, A
             "settings": {
                 "timezone": svc.settings.timezone,
                 "max_major_per_day": context.deps.rules.max_major_per_day if context else 3,
-                "review_weekday": 6,
-                "review_time": "18:00",
+                "review_weekday": svc.settings.lifeos_review_weekday,
+                "review_time": svc.settings.lifeos_review_time,
+                "morning_time": svc.settings.lifeos_morning_time,
+                "evening_time": svc.settings.lifeos_evening_time,
+                "schedule_enabled": True,
             },
+            "paused": [],
+            "drift": None,
+            "checked_at": None,
         }
     async with svc.session_factory() as db:
         row = await db.get(Workspace, principal.user_id)
@@ -98,9 +110,15 @@ async def get_workspace(request: Request, principal: CurrentUser) -> dict[str, A
         "modules": row.mapping if row else {},
         "settings": (
             {"timezone": row.timezone, "max_major_per_day": row.max_major_per_day,
-             "review_weekday": row.review_weekday, "review_time": row.review_time}
+             "review_weekday": row.review_weekday, "review_time": row.review_time,
+             "morning_time": row.morning_time, "evening_time": row.evening_time,
+             "schedule_enabled": row.schedule_enabled}
             if row else None
         ),
+        # From the daily drift check: modules left out until the mapping is saved again.
+        "paused": list(row.paused_modules or []) if row else [],
+        "drift": row.drift if row else None,
+        "checked_at": row.checked_at.isoformat() if row and row.checked_at else None,
     }  # fmt: skip
 
 
@@ -138,6 +156,10 @@ async def save_workspace(
         "user_id": principal.user_id,
         "mapping": mapping_json(specs),
         **body.settings.model_dump(),
+        # Checked against the live workspace just now, so nothing is paused.
+        "paused_modules": [],
+        "drift": None,
+        "checked_at": svc.clock(),
         "updated_at": func.now(),
     }
     async with svc.session_factory() as db, db.begin():

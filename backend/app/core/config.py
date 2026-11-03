@@ -70,6 +70,14 @@ class Settings(BaseSettings):
 
     # Shared secret for HMAC-signed cron calls (`POST /internal/cron/{job}`). Unset disables them.
     lifeos_cron_secret: SecretStr | None = None
+    # The owner's routine times, local to TIMEZONE (other accounts set their own).
+    lifeos_morning_time: str = "07:30"
+    lifeos_evening_time: str = "21:00"
+    lifeos_review_weekday: int = 6  # Monday is 0
+    lifeos_review_time: str = "18:00"
+    # Each scheduled tick starts at most this many runs, and none after this many seconds.
+    lifeos_tick_max_runs: int = 4
+    lifeos_tick_seconds: float = 60.0
 
     # Public demo: an in-memory sample workspace instead of Notion, and a "Try the demo" sign-in.
     # Requires a database whose name contains "demo", because the demo resets it.

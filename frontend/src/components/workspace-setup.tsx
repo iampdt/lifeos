@@ -113,7 +113,10 @@ function SetupForm({ catalogue, existing, suggestion }: {
   );
   const [schemas, setSchemas] = useState<Record<string, DataSourceSchema>>(suggestion.schemas);
   const [settings, setSettings] = useState<WorkspaceSettingsView>(
-    existing.settings ?? { timezone: browserZone(), max_major_per_day: 3, review_weekday: 6, review_time: "18:00" },
+    existing.settings ?? {
+      timezone: browserZone(), max_major_per_day: 3, review_weekday: 6, review_time: "18:00",
+      morning_time: "07:30", evening_time: "21:00", schedule_enabled: true,
+    },
   );
   const [issues, setIssues] = useState<Issue[]>([]);
   const [message, setMessage] = useState<string | null>(null);
@@ -446,6 +449,24 @@ function SettingsCard({ settings, onChange }: { settings: WorkspaceSettingsView;
           <Input id="review-time" type="time" className="w-32" value={settings.review_time}
             onChange={(e) => onChange({ ...settings, review_time: e.target.value })} />
         </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="morning-time">Morning briefing</Label>
+          <Input id="morning-time" type="time" className="w-32" value={settings.morning_time}
+            onChange={(e) => onChange({ ...settings, morning_time: e.target.value })} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="evening-time">Evening check-in</Label>
+          <Input id="evening-time" type="time" className="w-32" value={settings.evening_time}
+            onChange={(e) => onChange({ ...settings, evening_time: e.target.value })} />
+        </div>
+        <label className="flex items-start gap-2 sm:col-span-2">
+          <input type="checkbox" className="mt-0.5" checked={settings.schedule_enabled}
+            onChange={(e) => onChange({ ...settings, schedule_enabled: e.target.checked })} />
+          <span>
+            Run these automatically. Each starts within an hour of its time; the check-in and the review
+            then wait for you.
+          </span>
+        </label>
       </CardContent>
     </Card>
   );

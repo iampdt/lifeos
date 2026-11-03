@@ -53,15 +53,20 @@ class AccountWorkspaces:
         self.make_deps = make_deps
 
     async def deps_for(self, user_id: uuid.UUID) -> WorkflowDeps | None:
-        """None until the account has connected Notion and saved a mapping."""
+        """None until the account has connected Notion and saved a mapping. Modules the drift
+        check paused are left out."""
         async with self.session_factory() as db:
             workspace = await db.get(Workspace, user_id)
             connection = await db.get(NotionConnection, user_id)
         if workspace is None or connection is None or connection.status != "active":
             return None
+        paused = set(workspace.paused_modules or [])
+        if "tasks" in paused:
+            return None  # the drift check found Tasks no longer matching; set up again
+        specs = {n: s for n, s in specs_from_mapping(workspace.mapping).items() if n not in paused}
         return self.make_deps(
             self.connections.client(user_id),
-            specs_from_mapping(workspace.mapping),
+            specs,
             user_id,
             ZoneInfo(workspace.timezone),
             RuleSettings(max_major_per_day=workspace.max_major_per_day),

@@ -148,10 +148,10 @@ owner's workspace comes from the environment and is read-only here.
 | Method and path | Description |
 | --- | --- |
 | `GET /workspace/modules` | What each module needs: fields, allowed property types, required ones, and the meanings a status field must or may map (`needs`, `allows`) |
-| `GET /workspace` | `{source, editable, modules, settings}`; `source` is `environment`, `account` or null (not set up yet) |
+| `GET /workspace` | `{source, editable, modules, settings, paused, drift, checked_at}`; `source` is `environment`, `account` or null (not set up yet); `paused` lists the modules the daily drift check left out, with the problems in `drift` |
 | `GET /workspace/suggestion` | A first guess at the whole mapping: `{data_sources, modules, schemas, from_template}`, from the databases the connection can see (names and types only) |
 | `GET /workspace/data-sources/{id}?module=` | One database's properties (`schema`) and a guess at mapping the module onto it (`suggestion`); 404 `not_shared` when the connection can't see it |
-| `PUT /workspace` | Body `{modules, settings}`, with `settings` `{timezone, max_major_per_day, review_weekday, review_time}`. Checked structurally and then against the live data sources; problems come back as 422 `invalid_mapping` with every one in `error.details`. The owner's environment workspace answers 403 `environment_workspace` |
+| `PUT /workspace` | Body `{modules, settings}`, with `settings` `{timezone, max_major_per_day, review_weekday, review_time, morning_time, evening_time, schedule_enabled}`. Checked structurally and then against the live data sources; problems come back as 422 `invalid_mapping` with every one in `error.details`. The owner's environment workspace answers 403 `environment_workspace` |
 
 ### AI access
 
@@ -182,15 +182,21 @@ Notion public integration configured; otherwise these routes return 404 and
 
 ### Scheduled jobs
 
-`POST /internal/cron/{job}` for `morning_briefing`, `evening_checkin`, `weekly_review` and
-`expire_proposals`, with headers:
+`POST /internal/cron/{job}` for `tick`, `morning_briefing`, `evening_checkin`, `weekly_review`
+and `expire_proposals`, with headers:
 
 ```
 X-LifeOS-Timestamp: <unix seconds>
 X-LifeOS-Signature: hex(HMAC-SHA256(LIFEOS_CRON_SECRET, "<timestamp>.<job>.<body>"))
 ```
 
-The timestamp must be within 5 minutes. Workflow jobs run for the owner account, at most once
-per local day; a repeat returns `{"status": "already_ran"}`, and without an owner account
-`{"status": "skipped"}`. `expire_proposals` covers every account and runs on each call.
-Responses: `{job, date, status, run_id?}`, or `{…, expired}` for `expire_proposals`.
+The timestamp must be within 5 minutes.
+
+- `tick` (hourly) expires stale proposals, runs the daily drift check of each connected account,
+  and starts the routines due in each account's timezone. Response:
+  `{job, status, expired, drift_checked, ran: [{user_id, job, status, run_id}], waiting}`, where
+  `waiting` counts due routines left for the next tick by the cap.
+- The routine jobs run one routine for the owner, at most once per local day; a repeat returns
+  `{"status": "already_ran"}`, and without an owner account `{"status": "skipped"}`. Responses:
+  `{job, date, status, run_id?}`.
+- `expire_proposals` covers every account and runs on each call: `{job, date, status, expired}`.

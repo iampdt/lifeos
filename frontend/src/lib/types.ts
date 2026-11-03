@@ -199,12 +199,19 @@ export type WorkspaceSettingsView = {
   max_major_per_day: number;
   review_weekday: number;
   review_time: string;
+  morning_time: string;
+  evening_time: string;
+  schedule_enabled: boolean;
 };
 export type WorkspaceView = {
   source: "environment" | "account" | null;
   editable: boolean;
   modules: Record<string, ModuleMapping>;
   settings: WorkspaceSettingsView | null;
+  /** Modules the daily drift check left out until the setup is saved again, and why. */
+  paused: string[];
+  drift: Record<string, string[]> | null;
+  checked_at: string | null;
 };
 export type WorkspaceSuggestion = {
   data_sources: { id: string; title: string }[];

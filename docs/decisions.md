@@ -102,4 +102,6 @@ replaced. Dates are when the decision was made.
 | I41 | AI per account | Own key first, then the service key within a per-account daily allowance and the overall cap, then rules. Usage is counted in Postgres per UTC day, so a restart of the free host doesn't reset anyone's allowance |
 | I42 | Free-tier consent | The service key sends an account's data only after it agrees to a versioned disclosure of the Gemini free-tier terms; a changed disclosure asks again. Own keys follow the key owner's own terms |
 | I43 | Own keys | Checked with Google before saving (a refused key is a 400 naming the key, or 401/403; quota isn't the key's fault), stored encrypted, shown only as the last four characters |
+| I44 | Scheduling many accounts | One hourly signed tick instead of fixed per-routine schedules: routines are due for four hours in each account's timezone, the oldest run first up to a cap, and idempotency per account and local day makes late, retried or overlapping ticks harmless. Hourly keeps a private repository inside GitHub's free minutes |
+| I45 | Drift | Checked daily; a module that no longer matches is left out of the workspace (so nothing reads or writes it) until the mapping is saved again, rather than failing runs one by one |
 

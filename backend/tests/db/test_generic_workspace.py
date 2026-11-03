@@ -23,6 +23,7 @@ from app.notion.oauth import NotionOAuth, TokenGrant
 from app.workflows.contexts import Contexts
 from app.workflows.deps import RuleSettings, WorkflowDeps
 from app.workflows.runner import WorkflowRunner
+from app.workspaces.drift import check_drift
 from app.workspaces.store import AccountWorkspaces, mapping_json
 from tests.fake_notion import FakeNotion
 from tests.notion_http import NotionOverHTTP
@@ -192,7 +193,7 @@ async def account(session_factory):
         credentials = {"email": "member@example.com", "password": PASSWORD}
         login = await client.post("/api/v1/auth/login", json=credentials)
         client.headers["X-CSRF-Token"] = login.json()["csrf_token"]
-        yield client, user, fake
+        yield client, user, fake, services
 
 
 BODY = {
@@ -202,7 +203,7 @@ BODY = {
 
 
 async def test_an_account_saves_its_mapping_and_gets_a_working_workspace(account, session_factory):
-    client, user, fake = account
+    client, user, fake, _ = account
     me = (await client.get("/api/v1/auth/me")).json()
     assert me["workspace"] is False
     assert (await client.get("/api/v1/workspace")).json()["source"] is None
@@ -227,7 +228,7 @@ async def test_an_account_saves_its_mapping_and_gets_a_working_workspace(account
 
 
 async def test_a_mapping_that_doesnt_fit_is_refused_with_every_problem(account):
-    client, _, _ = account
+    client, _, _, _ = account
     broken = mapping_json(SPECS)
     del broken["tasks"]["properties"]["status"]["values"]["done"]  # nothing means "done"
     broken["habits"]["properties"]["title"]["type"] = "rich_text"
@@ -274,7 +275,7 @@ async def test_the_owners_environment_workspace_is_read_only(session_factory):
 
 
 async def test_onboarding_with_the_suggestion_as_is_gives_a_working_workspace(account):
-    client, _, fake = account
+    client, _, fake, _ = account
     proposal = (await client.get("/api/v1/workspace/suggestion")).json()
     assert {s["title"] for s in proposal["data_sources"]} == {"Tasks", "Habits"}
     assert set(proposal["modules"]) == {"tasks", "habits"}
@@ -296,3 +297,33 @@ async def test_onboarding_with_the_suggestion_as_is_gives_a_working_workspace(ac
     assert {p["name"] for p in one.json()["schema"]["properties"]} >= {"Meditate", "Steps"}
     missing = await client.get("/api/v1/workspace/data-sources/nope", params={"module": "tasks"})
     assert missing.status_code == 404 and missing.json()["error"]["code"] == "not_shared"
+
+
+async def test_the_daily_drift_check_pauses_what_changed_until_it_is_set_up_again(account):
+    client, user, fake, services = account
+    assert (await client.put("/api/v1/workspace", json=BODY)).status_code == 200
+
+    async def check():
+        paused = await check_drift(services.session_factory, services.connections, user.id,
+                                   lambda: NOW)  # fmt: skip
+        await services.contexts.forget(user.id)
+        return paused
+
+    habits = fake.schemas["ds-days"]["properties"]
+    habits["Step count"] = {**habits.pop("Steps"), "name": "Step count"}  # renamed in Notion
+    assert await check() == ["habits"]
+    view = (await client.get("/api/v1/workspace")).json()
+    assert view["paused"] == ["habits"] and "'Steps'" in view["drift"]["habits"][0]
+    run = (await client.post("/api/v1/workflows/evening_checkin/runs", json={})).json()
+    assert run["waiting_for"]["habits"] is None  # the rest of the workspace keeps working
+
+    tasks = fake.schemas["ds-todo"]["properties"]
+    tasks["Deadline"] = {**tasks.pop("Due date"), "name": "Deadline"}
+    assert await check() == ["habits", "tasks"]
+    assert (await client.get("/api/v1/auth/me")).json()["workspace"] is False
+
+    habits["Steps"] = {**habits.pop("Step count"), "name": "Steps"}
+    tasks["Due date"] = {**tasks.pop("Deadline"), "name": "Due date"}
+    saved = (await client.put("/api/v1/workspace", json=BODY)).json()
+    assert saved["paused"] == [] and saved["drift"] is None
+    assert (await client.get("/api/v1/auth/me")).json()["workspace"] is True
