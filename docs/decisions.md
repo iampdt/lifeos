@@ -14,7 +14,7 @@ replaced. Dates are when the decision was made.
 | D5 | **The official Notion API** (version `2025-09-03`, data-source endpoints) behind repositories and a small client interface | Supported and documented; tests swap in an in-memory fake | Calling an MCP server at runtime |
 | D6 | **A thin LLM layer over the official SDK**, with a mock provider. LangGraph is used for state, checkpoints and interrupts only | Full control of retries, timeouts and fallbacks; trivial to mock | LangChain chat-model wrappers |
 | D7 | **Backend-owned single-owner auth** (argon2id, HttpOnly session cookie); the web app proxies `/api/*` so the cookie is first-party | The app and API hosts are different sites, and browsers increasingly block cross-site cookies | Auth in the frontend with token forwarding |
-| D8 | **No in-process scheduler.** GitHub Actions calls signed `POST /internal/cron/{job}` endpoints; each job runs at most once a day | Free hosts sleep when idle, so an in-process scheduler would miss runs | APScheduler, Celery beat |
+| D8 | **No in-process scheduler.** GitHub Actions calls signed `POST /internal/cron/{job}` endpoints; each job runs at most once a day. Revised by I57 | Free hosts sleep when idle, so an in-process scheduler would miss runs | APScheduler, Celery beat |
 | D9 | **Due decides the week and month** (Monday–Sunday, Asia/Kolkata), not the optional Week/Month relations | Matches how the workspace is used and works for unlinked tasks | Trusting the manual relations |
 
 ## Product rules (2026-11-01)
@@ -69,7 +69,7 @@ replaced. Dates are when the decision was made.
 | I18 | Database migrations | Run at container start; the free tier has no pre-deploy step, and a single instance means no race |
 | I19 | Database URL | Accepts a standard libpq URL (as Neon provides it) or an asyncpg URL; the app derives the asyncpg form for SQLAlchemy and the libpq form for the LangGraph checkpointer |
 | I20 | Production mode | `LIFEOS_ENV=production` hides the OpenAPI schema and docs and always uses Secure cookies |
-| I21 | Deploys | Render deploys only after CI passes (`autoDeployTrigger: checksPass`); the API starts with writes off until the smoke test passes |
+| I21 | Deploys | Render deploys only after CI passes (`autoDeployTrigger: checksPass`); the API starts with writes off until the smoke test passes. Revised by I58 |
 | I22 | Streaming through Vercel | Verified on 2026-11-02: with `Cache-Control: no-transform`, chat events pass through Vercel's external rewrite as they happen (first event at 0.2 s, answer at 2.8 s) |
 | I23 | Pasted secrets | The API ignores whitespace around the configured bearer token and cron secret, since values pasted into dashboards often carry a stray space or newline |
 
@@ -115,3 +115,10 @@ replaced. Dates are when the decision was made.
 | I54 | Automatic mode | Offered only where a wrong write costs little and is easy to see: numbers the owner reported (pages read, goal progress, the scorecard). The values from just before the write are kept so Undo can put them back, and Undo refuses when the page changed since, so it never overwrites the owner. Moving, cancelling, creating and closing work always needs approval |
 | I55 | Drift at write time | The executor refuses a write only for the fields that drifted, and lets the rest of the data source be written: a renamed status option shouldn't stop due dates moving. One schema read per data source per batch keeps the cost to a request |
 
+## Hosting (2026-11-12)
+
+| # | Decision | Why | Rejected alternative |
+| --- | --- | --- | --- |
+| I56 | **One instance for the app and the demo.** The API mounts the demo under `/demo` (`LIFEOS_DEMO_MOUNT_DATABASE`): demo mode on its own database, a smaller daily token budget, and none of the deployment's Notion, sign-in or job credentials | Render gives a workspace 750 free instance hours a month: enough to keep one service awake, not two. Each app looks sessions up in its own database, so a demo session can't reach the real workspace | Two services that each sleep, so a visitor waits a minute; a paid instance |
+| I57 | **Kept awake, ticking in-process.** A Cloudflare Worker requests `/health` every 10 minutes outside 04:00–06:59 (at most 651 hours a month); while awake, the API ticks every 30 minutes on its own (`LIFEOS_TICK_MINUTES`). The signed endpoint stays for manual and outside calls | Cloudflare's Cron Triggers run on time and are free; GitHub's schedules ran hours late and stop when the account's Actions are unavailable. A ping needs no secret | GitHub Actions schedules; an outside cron service holding the cron secret |
+| I58 | **Deploy on every push** (`autoDeployTrigger: commit`) while the CI workflow is off; the same checks run locally before pushing | Render never deploys a commit that has no checks under `checksPass` | Leaving `checksPass` on, which stops all deploys |

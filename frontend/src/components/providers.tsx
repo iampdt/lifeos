@@ -6,7 +6,7 @@ import { useState } from "react";
 
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ApiError } from "@/lib/api";
+import { ApiError, isUnreachable, WAKE_RETRIES, WAKE_RETRY_MS } from "@/lib/api";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [client] = useState(() => {
@@ -15,7 +15,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
         queries: {
           staleTime: 30_000,
           refetchOnWindowFocus: false,
-          retry: (count, error) => !(error instanceof ApiError && error.status < 500) && count < 2,
+          // While a sleeping API starts, keep trying for two minutes; otherwise twice, for
+          // server errors only.
+          retry: (count, error) =>
+            isUnreachable(error)
+              ? count < WAKE_RETRIES
+              : !(error instanceof ApiError && error.status < 500) && count < 2,
+          retryDelay: (count, error) =>
+            isUnreachable(error) ? WAKE_RETRY_MS : Math.min(1_000 * 2 ** count, 30_000),
         },
       },
       queryCache: new QueryCache({

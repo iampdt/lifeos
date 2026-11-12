@@ -248,8 +248,9 @@ X-LifeOS-Signature: hex(HMAC-SHA256(LIFEOS_CRON_SECRET, "<timestamp>.<job>.<body
 
 The timestamp must be within 5 minutes.
 
-- `tick` (hourly) expires stale proposals, runs the daily drift check of each connected account,
-  and starts the routines due in each account's timezone. Response:
+- `tick` expires stale proposals, runs the daily drift check of each connected account, and
+  starts the routines due in each account's timezone. With `LIFEOS_TICK_MINUTES` set, the API
+  also runs it in-process on that interval while it's awake. Response:
   `{job, status, expired, drift_checked, ran: [{user_id, job, status, run_id}], waiting}`, where
   `waiting` counts due routines left for the next tick by the cap.
 - The routine jobs run one routine for the owner, at most once per local day; a repeat returns

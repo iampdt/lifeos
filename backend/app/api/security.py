@@ -32,7 +32,10 @@ SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 def services(request: Request) -> Services:
-    return request.app.state.services
+    try:
+        return request.app.state.services
+    except AttributeError:  # a mounted demo that didn't start
+        raise ApiError(503, "unavailable", "this service didn't start", True) from None
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect } from "react";
 
-import { ApiError, api, setCsrfToken } from "@/lib/api";
+import { WakingNotice } from "@/components/waking-notice";
+import { ApiError, api, isUnreachable, setCsrfToken, WAKE_RETRIES } from "@/lib/api";
 
 export type Me = {
   via: string;
@@ -47,7 +48,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const me = useQuery({
     queryKey: ["me"],
     queryFn: () => api<Me>("/auth/me"),
-    retry: false,
+    retry: (count, error) => isUnreachable(error) && count < WAKE_RETRIES,
     staleTime: Infinity,
   });
 
@@ -56,5 +57,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     if (me.error instanceof ApiError && me.error.status === 401) router.replace("/login");
   }, [me.data, me.error, router]);
 
-  return <SessionContext.Provider value={me.data ?? null}>{children}</SessionContext.Provider>;
+  return (
+    <SessionContext.Provider value={me.data ?? null}>
+      {me.isPending && isUnreachable(me.failureReason) && <WakingNotice />}
+      {children}
+    </SessionContext.Provider>
+  );
 }

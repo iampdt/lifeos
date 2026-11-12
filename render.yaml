@@ -1,6 +1,8 @@
 # Render Blueprint for the LifeOS API (free web tier, Docker).
 # Values marked `sync: false` are entered once in the Render dashboard when the Blueprint is
-# created; see docs/deployment.md.
+# created; see docs/deployment.md. One service serves the app and the public demo, and a
+# Cloudflare Worker (ops/keep-awake) keeps it awake: 750 free hours a month cover one awake
+# instance, not two (decisions I56, I57).
 services:
   - type: web
     name: lifeos-api
@@ -12,12 +14,21 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /api/v1/health
-    autoDeployTrigger: checksPass
+    # Every push to main. With the CI workflow on, use checksPass: Render never deploys a
+    # commit that has no checks under checksPass (decision I58).
+    autoDeployTrigger: commit
     envVars:
       - key: LIFEOS_ENV
         value: production
       - key: TIMEZONE
         value: Asia/Kolkata
+      # The scheduler ticks in-process every 30 minutes while the instance is awake.
+      - key: LIFEOS_TICK_MINUTES
+        value: "30"
+      # The public demo, under /demo, on this database of the same server (its name must
+      # contain "demo"; demo mode resets it on every start).
+      - key: LIFEOS_DEMO_MOUNT_DATABASE
+        value: lifeos_demo
       - key: NOTION_PROFILE
         value: live
       # Kill switch for Notion writes (every write still needs approval). Kept here rather than in
@@ -52,39 +63,3 @@ services:
       - key: LIFEOS_PUBLIC_URL
         value: https://lifeos-five-tau.vercel.app
 
-  # Public demo: the same image on an in-memory sample workspace (no Notion). It resets its
-  # database on start, so it refuses any database whose name doesn't contain "demo".
-  - type: web
-    name: lifeos-demo-api
-    runtime: docker
-    plan: free
-    region: singapore
-    rootDir: backend
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
-    healthCheckPath: /api/v1/health
-    autoDeployTrigger: checksPass
-    envVars:
-      - key: LIFEOS_ENV
-        value: production
-      - key: LIFEOS_DEMO_MODE
-        value: "true"
-      - key: TIMEZONE
-        value: Asia/Kolkata
-      # A smaller daily budget: anyone on the internet can use the demo's chat.
-      - key: LLM_DAILY_TOKEN_BUDGET
-        value: "150000"
-      # Reuse the main service's secrets without anyone copying them; LIFEOS_DEMO_DATABASE swaps
-      # the database name in the copied URL, so the demo only ever touches lifeos_demo.
-      - key: LIFEOS_DEMO_DATABASE
-        value: lifeos_demo
-      - key: DATABASE_URL
-        fromService:
-          type: web
-          name: lifeos-api
-          envVarKey: DATABASE_URL
-      - key: GEMINI_API_KEY
-        fromService:
-          type: web
-          name: lifeos-api
-          envVarKey: GEMINI_API_KEY

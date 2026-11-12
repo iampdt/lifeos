@@ -10,7 +10,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError, api, setCsrfToken } from "@/lib/api";
+import { WakingNotice } from "@/components/waking-notice";
+import {
+  ApiError,
+  api,
+  isUnreachable,
+  setCsrfToken,
+  WAKE_RETRIES,
+  WAKE_RETRY_MS,
+} from "@/lib/api";
 
 type SignedIn = { email: string; csrf_token: string };
 type Meta = { demo: boolean; google: boolean; password: boolean };
@@ -19,11 +27,14 @@ export default function LoginPage() {
   const meta = useQuery({ queryKey: ["meta"], queryFn: () => api<Meta>("/meta") });
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 py-10">
+      {meta.isPending && isUnreachable(meta.failureReason) && <WakingNotice />}
       {meta.isPending ? (
         <Skeleton className="h-64 w-full max-w-sm" />
-      ) : meta.data?.demo ? (
+      ) : meta.isError ? (
+        <Unreachable retry={() => meta.refetch()} />
+      ) : meta.data.demo ? (
         <DemoEntry />
-      ) : meta.data?.google ? (
+      ) : meta.data.google ? (
         <Suspense fallback={<Skeleton className="h-64 w-full max-w-sm" />}>
           <GoogleSignIn />
         </Suspense>
@@ -36,6 +47,22 @@ export default function LoginPage() {
         <Link href="/privacy" className="underline underline-offset-4">privacy policy</Link>.
       </p>
     </main>
+  );
+}
+
+function Unreachable({ retry }: { retry: () => void }) {
+  return (
+    <Card className="w-full max-w-sm">
+      <CardHeader>
+        <CardTitle className="text-xl">LifeOS</CardTitle>
+        <CardDescription>The server isn&apos;t answering yet. Try again in a minute.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button className="w-full" onClick={retry}>
+          Try again
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -151,15 +178,26 @@ function DemoEntry() {
   const signedIn = useSignedIn();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [waking, setWaking] = useState(false);
 
   async function enter() {
     setPending(true);
     setError(null);
-    try {
-      signedIn(await api<SignedIn>("/auth/demo", { method: "POST" }));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Couldn't reach the demo. Try again in a minute.");
-      setPending(false);
+    for (let attempt = 0; ; attempt++) {
+      try {
+        signedIn(await api<SignedIn>("/auth/demo", { method: "POST" }));
+        return;
+      } catch (err) {
+        if (isUnreachable(err) && attempt < WAKE_RETRIES) {
+          setWaking(true);
+          await new Promise((resolve) => setTimeout(resolve, WAKE_RETRY_MS));
+          continue;
+        }
+        setError(err instanceof ApiError ? err.message : "Couldn't reach the demo. Try again in a minute.");
+        setWaking(false);
+        setPending(false);
+        return;
+      }
     }
   }
 
@@ -180,12 +218,12 @@ function DemoEntry() {
         </ul>
         <p className="text-xs text-muted-foreground">
           This demo uses a sample workspace instead of a real Notion account. It&apos;s shared
-          with other visitors and resets when idle. The first visit can take up to a minute while
-          the free server wakes up.
+          with other visitors and resets now and then. If the free server is asleep, the first
+          visit takes about a minute while it wakes up.
         </p>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <Button size="lg" onClick={enter} disabled={pending}>
-          {pending ? "Opening the demo…" : "Try the demo"}
+          {waking ? "Waking up the server…" : pending ? "Opening the demo…" : "Try the demo"}
         </Button>
       </CardContent>
     </Card>

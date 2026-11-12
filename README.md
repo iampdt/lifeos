@@ -3,8 +3,8 @@
 A chief of staff for a personal productivity system in Notion.
 
 **[Try the live demo →](https://lifeos-demo-rho.vercel.app)** No account needed: it runs the
-real application on a sample workspace. The first visit can take up to a minute while the free
-server wakes up.
+real application on a sample workspace. The free server is kept awake from 07:00 to 04:00 IST;
+at other times the first visit can take up to a minute while it wakes up.
 
 LifeOS reads the workspace and runs its routines: an evening check-in that turns a free-text
 reply into updates, a morning briefing, and weekly and monthly reviews. It answers questions in
@@ -18,7 +18,7 @@ back and recorded in an append-only audit log.
 ```
  Browser ──► Next.js ── /api/* ──► FastAPI ──► Notion API (source of truth)
                                      │  ├────► Gemini (structured output, embeddings)
- GitHub Actions ── signed cron ──────┘  └────► Postgres + pgvector (proposals, runs, audit,
+ Cloudflare cron ── keeps awake ─────┘  └────► Postgres + pgvector (proposals, runs, audit,
                                                  knowledge index, memory)
 ```
 
@@ -53,7 +53,8 @@ back and recorded in an append-only audit log.
   latency, tokens)
 - Google sign-in, a Notion connection per account (OAuth, encrypted tokens), setup from any
   layout, and a free-tier AI allowance or the account's own Gemini key
-- Scheduled routines in each account's timezone through signed calls from GitHub Actions
+- Scheduled routines in each account's timezone, run by the API itself while a Cloudflare cron
+  keeps the free instance awake
 
 ## Stack
 
@@ -62,7 +63,7 @@ back and recorded in an append-only audit log.
 | API | Python 3.12, FastAPI, Pydantic, SQLAlchemy (async), Alembic, LangGraph, `google-genai` |
 | Data | PostgreSQL with pgvector (Neon in production), the Notion API |
 | Web | Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui, TanStack Query |
-| Operations | Docker, Render, Vercel, GitHub Actions |
+| Operations | Docker, Render, Vercel, Cloudflare Workers, GitHub Actions |
 
 ## Getting started
 
@@ -83,7 +84,8 @@ Details: [docs/development.md](docs/development.md). Deployment: [docs/deploymen
 backend/    FastAPI app, workflows, agents, Notion integration, tests (see backend/README.md)
 frontend/   Next.js web app (see frontend/README.md)
 docs/       architecture, decisions, API, development, deployment, roadmap, build log
-.github/    CI and scheduled jobs
+ops/        Cloudflare Worker that keeps the API awake
+.github/    CI, and scheduled jobs as an alternative
 render.yaml Render Blueprint for the API
 ```
 

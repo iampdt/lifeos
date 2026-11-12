@@ -14,6 +14,31 @@ export class ApiError extends Error {
   }
 }
 
+/** No answer from the API itself: the network failed, or a proxy answered instead (the free
+ * host takes about a minute to start a sleeping instance). Worth retrying for a while. */
+export function isUnreachable(error: unknown): boolean {
+  return error instanceof ApiError && error.code === "unreachable";
+}
+
+/** How often, and how far apart, to retry while the API can't be reached: two minutes. */
+export const WAKE_RETRIES = 24;
+export const WAKE_RETRY_MS = 5_000;
+
+function unreachable(): ApiError {
+  return new ApiError(503, "unreachable", "The server is waking up. This can take a minute.", true);
+}
+
+/** `fetch`, with a failed connection reported as `unreachable` (a cancelled request still throws
+ * its AbortError). */
+async function send(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (error) {
+    if (init.signal?.aborted) throw error;
+    throw unreachable();
+  }
+}
+
 let csrfToken: string | null = null;
 
 export function setCsrfToken(token: string | null) {
@@ -37,6 +62,8 @@ async function toError(response: Response): Promise<ApiError> {
     body = undefined;
   }
   const error = body?.error;
+  // Every error from the API has a JSON body; a gateway error without one came from a proxy.
+  if (!error && [502, 503, 504].includes(response.status)) return unreachable();
   return new ApiError(
     response.status,
     error?.code ?? "http_error",
@@ -49,7 +76,7 @@ async function toError(response: Response): Promise<ApiError> {
 /** A change made before the session check finished still needs the CSRF token. */
 async function ensureCsrf(method: string, path: string) {
   if (method === "GET" || csrfToken || path === "/auth/login") return;
-  const response = await fetch("/api/v1/auth/me", { credentials: "same-origin", cache: "no-store" });
+  const response = await send("/api/v1/auth/me", { credentials: "same-origin", cache: "no-store" });
   if (response.ok) csrfToken = ((await response.json()) as { csrf_token: string | null }).csrf_token;
 }
 
@@ -59,7 +86,7 @@ export async function api<T>(
 ): Promise<T> {
   const method = init.method ?? "GET";
   await ensureCsrf(method, path);
-  const response = await fetch(`/api/v1${path}`, {
+  const response = await send(`/api/v1${path}`, {
     method,
     headers: headers(method, init.body !== undefined),
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
@@ -69,6 +96,8 @@ export async function api<T>(
   });
   if (!response.ok) throw await toError(response);
   if (response.status === 204) return undefined as T;
+  // A host's "starting" page can arrive with 200: only the API answers with JSON.
+  if (!response.headers.get("content-type")?.includes("application/json")) throw unreachable();
   return response.json() as Promise<T>;
 }
 
@@ -82,7 +111,7 @@ export async function stream(
   signal?: AbortSignal,
 ): Promise<void> {
   await ensureCsrf("POST", path);
-  const response = await fetch(`/api/v1${path}`, {
+  const response = await send(`/api/v1${path}`, {
     method: "POST",
     headers: headers("POST", true),
     body: JSON.stringify(body),
@@ -90,6 +119,7 @@ export async function stream(
     signal,
   });
   if (!response.ok || !response.body) throw await toError(response);
+  if (!response.headers.get("content-type")?.includes("text/event-stream")) throw unreachable();
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";

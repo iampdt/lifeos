@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     # Each scheduled tick starts at most this many runs, and none after this many seconds.
     lifeos_tick_max_runs: int = 4
     lifeos_tick_seconds: float = 60.0
+    # Also tick in this process every this many minutes, on the clock (0: off). It only ticks
+    # while the instance is awake, so on a free host something must keep it awake (deployment.md).
+    lifeos_tick_minutes: int = 0
 
     # Public demo: an in-memory sample workspace instead of Notion, and a "Try the demo" sign-in.
     # Requires a database whose name contains "demo", because the demo resets it.
@@ -89,6 +92,11 @@ class Settings(BaseSettings):
     # Use this database name on the server in DATABASE_URL. Lets the demo reuse the main
     # service's connection string (copied by the Blueprint) while pointing at its own database.
     lifeos_demo_database: str | None = None
+    # Also serve the public demo from this process, under /demo, on this database of the same
+    # server: one free instance kept awake then hosts both (deployment.md "Public demo").
+    lifeos_demo_mount_database: str | None = None
+    # That demo's daily token budget: anyone on the internet can use its chat.
+    lifeos_demo_daily_tokens: int = 150_000
 
     @model_validator(mode="after")
     def _production_is_strict(self) -> Settings:
@@ -127,6 +135,30 @@ class Settings(BaseSettings):
     def password_sign_in(self) -> bool:
         """Passwords are a fallback for deployments without Google sign-in (local development)."""
         return not self.google_sign_in and not self.lifeos_demo_mode
+
+    def mounted_demo(self) -> Settings:
+        """Settings for the demo served under /demo: this server's demo database and the same
+        models, but none of this deployment's Notion, sign-in or job credentials."""
+        from app.db.session import with_database
+
+        assert self.lifeos_demo_mount_database
+        return self.model_copy(
+            update={
+                "lifeos_demo_mode": True,
+                "database_url": with_database(self.database_url, self.lifeos_demo_mount_database),
+                "llm_daily_token_budget": self.lifeos_demo_daily_tokens,
+                "lifeos_demo_mount_database": None,
+                "lifeos_tick_minutes": 0,
+                "notion_token": None,
+                "lifeos_api_token": None,
+                "lifeos_cron_secret": None,
+                "google_client_id": None,
+                "google_client_secret": None,
+                "notion_oauth_client_id": None,
+                "notion_oauth_client_secret": None,
+                "lifeos_encryption_key": None,
+            }
+        )
 
     def model_chain(self, tier: str) -> list[str]:
         raw = self.llm_smart_models if tier == "smart" else self.llm_fast_models

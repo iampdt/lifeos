@@ -9,7 +9,7 @@ import { humanize } from "@/lib/format";
 
 let asked = false; // once per page load
 
-/** Starts any routine that's due but hasn't run today (the hourly tick can run late). */
+/** Starts any routine that's due but hasn't run today (a sleeping API misses its ticks). */
 export function useCatchUp(enabled: boolean) {
   const client = useQueryClient();
   useEffect(() => {
@@ -22,6 +22,6 @@ export function useCatchUp(enabled: boolean) {
         const names = result.started.map((r) => humanize(r.job).toLowerCase()).join(" and ");
         toast.success(`Started your ${names}.`);
       })
-      .catch(() => {}); // the hourly tick will get to it
+      .catch(() => {}); // the next tick will get to it
   }, [enabled, client]);
 }

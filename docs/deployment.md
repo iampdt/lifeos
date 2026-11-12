@@ -7,12 +7,17 @@ LifeOS runs on free tiers:
 | Web app | Vercel (Hobby) | `frontend/` (Next.js, built natively by Vercel) |
 | API | Render (Free web service, Docker) | `render.yaml`, `backend/Dockerfile` |
 | Database | Neon (Free Postgres) | `DATABASE_URL` |
-| Scheduled jobs and CI | GitHub Actions | `.github/workflows/cron.yml`, `.github/workflows/ci.yml` |
+| Keeping the API awake | Cloudflare Workers (Free, a Cron Trigger) | `ops/keep-awake/` |
+| CI | GitHub Actions | `.github/workflows/ci.yml` |
 
 ```
-Browser ──► Vercel (Next.js) ── /api/* ──► Render (FastAPI) ──► Neon, Notion, Gemini
-GitHub Actions ── signed POST /api/v1/internal/cron/{job} ──► Render
+Browser ──► Vercel (Next.js) ── /api/* ──────────► Render (FastAPI) ──► Neon, Notion, Gemini
+Visitor ──► Vercel (demo)    ── /api/* ── /demo ──►   same service, demo mode
+Cloudflare Cron Trigger ── every 10 minutes ── GET /api/v1/health (via the web app)
 ```
+
+The API schedules its own routines while it's awake; the Worker keeps it awake (decisions I56,
+I57).
 
 ## First deployment
 
@@ -34,8 +39,10 @@ GitHub Actions ── signed POST /api/v1/internal/cron/{job} ──► Render
    and the `NOTION_DS_*` data-source IDs.
 3. `LIFEOS_API_TOKEN` and `LIFEOS_CRON_SECRET` are generated. Copy both from the service's
    Environment page; the next steps need them.
-4. The first deploy builds the image and runs the migrations on start. It deploys again
-   whenever CI passes on `main`.
+4. The first deploy builds the image and runs the migrations on start (for the demo's
+   database too). It deploys again on every push to `main`. With the CI workflow on, set
+   `autoDeployTrigger: checksPass` to deploy only commits that pass it; Render never deploys a
+   commit that has no checks under `checksPass`.
 
 Writes start **off** (`LIFEOS_WRITES_ENABLED` is `"false"` in `render.yaml` for a first
 deployment).
@@ -60,18 +67,30 @@ DATABASE_URL='<Neon connection string>' .venv/bin/python -m scripts.create_owner
 3. Deploy, then sign in at the Vercel URL. If the first deployment didn't start (Vercel may ask
    to re-authenticate), use Deployments → ⋯ → **Create Deployment** with branch `main`.
 
-### 5. Scheduled jobs (GitHub)
+### 5. Keeping the API awake
 
-Repository → Settings → Secrets and variables → Actions → add:
+With `LIFEOS_TICK_MINUTES=30` (set in `render.yaml`), the API runs the scheduler tick itself at
+:00 and :30 while it's awake, so routines start within 30 minutes of their time. Render stops a
+free instance after 15 minutes without a request, so a Cloudflare Worker requests `/health`
+every 10 minutes:
 
-| Secret | Value |
-| --- | --- |
-| `LIFEOS_API_URL` | The Render URL, without a trailing slash |
-| `LIFEOS_CRON_SECRET` | The value from Render |
+```bash
+cd ops/keep-awake
+npx wrangler login     # once, in a browser
+npx wrangler deploy
+```
 
-Run **Scheduled jobs** once from the Actions tab (`workflow_dispatch`, job `tick`) to check the
-signature. Without these secrets, scheduled runs are skipped with a notice. The schedule calls
-the tick every hour at minute 30; each account's routines start within an hour of their time.
+Before deploying, set `APP_URL` in `wrangler.jsonc` to the web app (the request goes through its
+proxy, the same path as a visitor's). The Worker has no URL of its own; its runs are under
+Workers & Pages → `lifeos-keep-awake` → Logs. It skips `QUIET_HOURS` (04:00 to 06:59 in
+`TIMEZONE`), which keeps one instance inside the 750 free hours a month; a request in those
+hours still wakes the API, after about a minute. `node --test ops/keep-awake/worker.test.js`
+tests it.
+
+**Instead, GitHub Actions** (`.github/workflows/cron.yml`) can call the signed tick every hour.
+Add the repository secrets `LIFEOS_API_URL` (the Render URL, without a trailing slash) and
+`LIFEOS_CRON_SECRET` (the value from Render), then run **Scheduled jobs** once from the Actions
+tab to check the signature. GitHub's schedules can run hours late.
 
 ### 6. Smoke test
 
@@ -89,7 +108,7 @@ the proxy. It doesn't write to Notion.
 ### 7. Turn on writes
 
 When the smoke test passes, set `LIFEOS_WRITES_ENABLED` to `"true"` in `render.yaml` and push;
-the API redeploys after CI passes. Approved changes are written to Notion from then on. The
+the API redeploys. Approved changes are written to Notion from then on. The
 switch lives in `render.yaml`, not the dashboard, because a Blueprint sync resets values that the
 file sets.
 
@@ -159,28 +178,33 @@ In this order, so each step works before the next depends on it:
 
 ## Public demo
 
-The Blueprint also defines `lifeos-demo-api`: the same image with `LIFEOS_DEMO_MODE=true`, an
-in-memory sample workspace and no Notion connection (see architecture §13).
+`lifeos-api` also serves the demo: with `LIFEOS_DEMO_MOUNT_DATABASE=lifeos_demo` (set in
+`render.yaml`), the same process answers under `/demo` in demo mode, with an in-memory sample
+workspace and no Notion connection (see architecture §13). It uses the same Gemini key with its
+own daily budget (`LIFEOS_DEMO_DAILY_TOKENS`, 150,000) and none of the deployment's Notion,
+sign-in or job credentials.
 
 1. **Database.** In the Neon project, add a database named `lifeos_demo` (Databases → New
    database). Demo mode resets its database on every start and refuses to run against a
    database whose name doesn't contain `demo`.
-2. **API.** Sync the Blueprint (Blueprints → `lifeos` → Manual sync). Render creates
-   `lifeos-demo-api`, copies `DATABASE_URL` and `GEMINI_API_KEY` from `lifeos-api`
-   (`fromService`), and `LIFEOS_DEMO_DATABASE=lifeos_demo` points the copied URL at the demo
-   database. The demo shares the Gemini quota with the main service; to separate them, set its
-   own `GEMINI_API_KEY` in the dashboard and drop the `fromService` entry.
+2. **API.** Nothing to add: the start script migrates the demo's database too.
 3. **Web app.** Import the repository into Vercel again as a second project (for example
-   `lifeos-demo`, root directory `frontend`) with `LIFEOS_BACKEND_URL` = the demo API's URL.
+   `lifeos-demo`, root directory `frontend`) with `LIFEOS_BACKEND_URL` = the API's URL followed
+   by `/demo` (for example `https://lifeos-api-xxxx.onrender.com/demo`). Redeploy after
+   changing it.
 4. **Check.** Open the demo URL: the sign-in page shows **Try the demo** instead of the password
    form.
+
+The demo can still run as a service of its own (`LIFEOS_DEMO_MODE=true` and
+`LIFEOS_DEMO_DATABASE=lifeos_demo`), but two free services can't both stay awake.
 
 ## Operations
 
 | Task | How |
 | --- | --- |
 | Logs | Render dashboard → `lifeos-api` → Logs |
-| Run a job now | Actions → Scheduled jobs → Run workflow |
+| Run a job now | A signed `POST /api/v1/internal/cron/{job}` ([api.md](api.md#scheduled-jobs)), or Actions → Scheduled jobs → Run workflow |
+| Keep-awake runs | Cloudflare dashboard → Workers & Pages → `lifeos-keep-awake` → Logs |
 | Rotate the bearer token | Change `LIFEOS_API_TOKEN` on Render |
 | Rotate the cron secret | Change `LIFEOS_CRON_SECRET` on Render and in GitHub secrets together |
 | Change the password | `create_owner EMAIL --reset` against the production `DATABASE_URL`; signs out every session (password sign-in only) |
@@ -191,18 +215,20 @@ in-memory sample workspace and no Notion connection (see architecture §13).
 
 - With `rootDir` set in `render.yaml`, Render resolves `dockerfilePath` and `dockerContext`
   relative to that directory, not the repository root.
-- A Blueprint deploys from `main` as soon as it syncs; later commits deploy after CI passes.
+- A Blueprint deploys from `main` as soon as it syncs; later commits deploy as
+  `autoDeployTrigger` says.
+- Removing a service from `render.yaml` doesn't delete it. The demo's former service,
+  `lifeos-demo-api`, stays in the dashboard (asleep, using no hours) until it's deleted there.
 - Commits that change only files outside `backend/` don't rebuild the API.
 
 ## Free-tier behaviour
 
 | Behaviour | Effect | Handling |
 | --- | --- | --- |
-| Render sleeps after 15 minutes without traffic | The first request after idle takes about a minute | Scheduled jobs call `/health` first and retry; the web app shows loading states |
-| Render: 750 instance hours a month | The hourly tick wakes the API for about 15 minutes each time: roughly 200 hours a month, plus use | — |
+| Render sleeps after 15 minutes without traffic | The first request after idle takes about a minute | The keep-awake Worker pings every 10 minutes outside quiet hours; the web app tells the visitor the server is waking and retries |
+| Render: 750 instance hours a month for the workspace | One instance awake 21 hours a day uses at most 651; two awake services wouldn't fit, and running out suspends every free service until the next month | The demo shares the instance; quiet hours each night |
 | Neon scales to zero after 5 minutes | The first query after idle is slower | The connection pool pings before use |
-| Neon: 1 GB and 100 CU-hours a month | Each tick keeps the database up about 5 minutes: roughly 20 CU-hours a month at the smallest size, plus use | — |
-| GitHub Actions schedules can run late | Ticks may start minutes late | Routines stay due for four hours and run at most once per local day |
-| GitHub Actions on a private repository: 2,000 minutes a month | Each tick bills at least a minute: about 730 a month hourly | Every 30 minutes only once the repository is public |
-| Public repositories: schedules are disabled after 60 days without activity | Scheduled jobs stop | Re-enable the workflow in the Actions tab |
+| Neon: 1 GB and 100 CU-hours a month | Each tick keeps the database up about 5 minutes: roughly 27 CU-hours a month at the smallest size, plus use | — |
+| Cloudflare Workers Free: 5 Cron Triggers an account, 100,000 requests a day | The Worker uses one trigger and 144 runs a day | — |
+| GitHub Actions schedules (the alternative) can run hours late | Ticks start late | Routines stay due for four hours and run at most once per local day |
 | Gemini free-tier limits change | Calls fail with 429 | The model chain falls back, then the rules take over |

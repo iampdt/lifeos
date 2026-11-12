@@ -1,7 +1,7 @@
-"""Scheduled jobs, called by GitHub Actions (decision D8): `POST /api/v1/internal/cron/{job}`.
+"""Scheduled jobs: `POST /api/v1/internal/cron/{job}` (decision D8), and the same tick in-process.
 
-There is no in-process scheduler, because the free web tier sleeps when idle. Each call is
-authenticated by an HMAC-SHA256 signature instead of a session:
+The free web tier sleeps when idle, so an outside caller (GitHub Actions) started each job. Each
+call is authenticated by an HMAC-SHA256 signature instead of a session:
 
     X-LifeOS-Timestamp: <unix seconds>
     X-LifeOS-Signature: hex(HMAC-SHA256(LIFEOS_CRON_SECRET, f"{timestamp}.{job}.{body}"))
@@ -9,16 +9,20 @@ authenticated by an HMAC-SHA256 signature instead of a session:
 The timestamp must be within 5 minutes, and the signature covers the job name, so a captured
 request can't be replayed later or reused for another job.
 
-`tick` is the scheduler (multi-user §Scheduling): called every hour, it expires stale proposals,
+`tick` is the scheduler (multi-user §Scheduling): called on a schedule, it expires stale proposals,
 runs each account's daily drift check, and starts the routines that are due in each account's
 own timezone (`workflows/schedule.py`), the oldest first, up to a cap per tick. A routine runs at
 most once per account and local day (`cron_runs`), so retried or overlapping ticks are
 harmless; a failed run frees its slot for the next tick. The named jobs (`morning_briefing`, …)
 still run one routine for the owner on demand.
+
+With LIFEOS_TICK_MINUTES set, `tick_forever` also ticks in-process while the instance is awake;
+a scheduled pinger keeps it awake (decision I56, deployment.md "Keeping the API awake").
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import logging
@@ -100,6 +104,17 @@ async def run_job(
 
 
 # --- the scheduler -------------------------------------------------------------------------
+
+
+async def tick_forever(svc, minutes: int) -> None:
+    """Tick every `minutes`, on the clock (:00 and :30 for 30), until cancelled."""
+    period = minutes * 60
+    while True:
+        await asyncio.sleep(period - time.time() % period + 5)
+        try:
+            logger.info("tick: %s", await _tick(svc))
+        except Exception:  # the database or Notion unavailable: the next tick tries again
+            logger.exception("tick failed")
 
 
 async def _tick(svc) -> dict[str, Any]:

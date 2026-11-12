@@ -29,9 +29,9 @@ Design rationale for each choice is in [decisions.md](decisions.md); endpoints a
 ## 2. System overview
 
 ```
- Browser ──► Next.js (Vercel) ── /api/* rewrite ──► FastAPI (Render, Docker)
-                                                     │
- GitHub Actions cron ── HMAC-signed POST ───────────►│
+ Browser ──► Next.js (Vercel) ── /api/* rewrite ──► FastAPI (Render, Docker; the tick runs
+                                                     │   in-process every 30 minutes)
+ Cloudflare Cron Trigger ── GET /health ────────────►│   (keeps the free instance awake)
                                                      ├──► Notion API      (source of truth)
                                                      ├──► Gemini          (structured output)
                                                      └──► Postgres (Neon) (proposals, runs, audit,
@@ -39,7 +39,8 @@ Design rationale for each choice is in [decisions.md](decisions.md); endpoints a
 ```
 
 The browser only talks to the Next.js app; `/api/*` is proxied to the backend, so the session
-cookie is first-party. Scheduled jobs call the backend directly with a signed request.
+cookie is first-party. The API runs its own schedule while it's awake, and a Cloudflare Worker
+keeps it awake (§13); a signed request can also start a job.
 
 ### Backend modules (`backend/app`)
 
@@ -225,7 +226,8 @@ Each fallback is named in the run's warnings. Chat reports that the AI is unavai
 
 ### 5.7 Scheduling
 
-Every hour GitHub Actions calls `POST /api/v1/internal/cron/tick` with an HMAC signature. The
+Every 30 minutes (`LIFEOS_TICK_MINUTES`) the API runs the tick in-process while it's awake; the
+same tick is available as `POST /api/v1/internal/cron/tick` with an HMAC signature. The
 tick expires stale proposals, runs each account's daily drift check, and starts the routines due
 in each account's own timezone (`workflows/schedule.py`):
 
@@ -240,8 +242,8 @@ The owner's times come from settings (`LIFEOS_MORNING_TIME`, …) in `TIMEZONE`;
 account sets its own, or turns them off. A routine is due for four hours from its time, within
 the same local day, and runs at most once per account and local date (`cron_runs`); the oldest
 due routines run first, up to `LIFEOS_TICK_MAX_RUNS` per tick, and the rest wait for the next
-tick. A failed run frees its slot so a later tick retries it. Because scheduled runs can arrive
-hours late, the web app also asks on load (`POST /schedule/catch-up`) for the account's due
+tick. A failed run frees its slot so a later tick retries it. Because a sleeping instance misses
+its ticks, the web app also asks on load (`POST /schedule/catch-up`) for the account's due
 routines, which start then if they haven't yet.
 
 ### 5.8 Memory
@@ -426,8 +428,8 @@ Productivity records stay in Notion. Postgres holds only state LifeOS owns. Migr
   routine, AI calls and tokens, median and 95th-percentile model time per run, runs and tokens
   per day), shown on the Activity page.
 - `GET /api/v1/health` (liveness) and `GET /api/v1/health/ready` (database).
-- Free-tier hosts sleep: the database pool pings connections before use, and scheduled jobs
-  wake the API before calling it.
+- Free-tier hosts sleep: the database pool pings connections before use, a Cloudflare Worker
+  keeps the API awake, and the web app retries while a sleeping API starts.
 
 ## 11. Frontend
 
@@ -471,7 +473,8 @@ No test writes to the real workspace. CI runs everything except the live tests.
 | Vercel (Hobby) | Next.js app | Personal, non-commercial use |
 | Render (Free, Docker) | FastAPI API | Sleeps after 15 minutes without traffic and takes about a minute to wake; 750 instance hours a month; no pre-deploy step, so migrations run at container start |
 | Neon (Free) | Postgres | 1 GB per project, 100 CU-hours a month, scales to zero after 5 minutes idle |
-| GitHub Actions | CI and scheduled jobs | Scheduled runs can be late; in a public repository they are disabled after 60 days without activity |
+| Cloudflare Workers (Free) | Keeping the API awake (`ops/keep-awake`) | 5 Cron Triggers an account; skips 04:00–06:59 so one instance stays inside Render's free hours |
+| GitHub Actions | CI | Optional; the API deploys on every push while it's off |
 | Gemini (free tier) | Models | Per-model rate limits that change; the model chain is configuration |
 | Notion API | Source of truth | About 3 requests/s per connection; `429` with `Retry-After` |
 
@@ -479,8 +482,10 @@ Setup and operations: [deployment.md](deployment.md).
 
 ### Public demo
 
-A second deployment runs the same image with `LIFEOS_DEMO_MODE=true`, for anyone to try without
-a Notion account:
+The API also serves a demo under `/demo` (`LIFEOS_DEMO_MOUNT_DATABASE`), for anyone to try
+without a Notion account. It's a second app in the same process with `LIFEOS_DEMO_MODE=true`, its
+own database and none of the deployment's credentials, so one instance kept awake serves both
+(decision I56); it can also run as a service of its own:
 
 - **Workspace:** an in-memory implementation of the Notion client (`app/demo/notion.py`, the
   same one the tests use) seeded with a believable week, relative to today (`app/demo/seed.py`).
@@ -492,7 +497,8 @@ a Notion account:
   start (the free host restarts after an idle spell) and from the in-app **Reset demo** button
   (rate-limited). Because a reset wipes tables, demo mode refuses to start unless the database
   name contains `demo`.
-- **Limits:** a separate, smaller daily token budget; no scheduled jobs.
+- **Limits:** a separate, smaller daily token budget (`LIFEOS_DEMO_DAILY_TOKENS`); no scheduled
+  jobs.
 
 ## 14. Planned
 

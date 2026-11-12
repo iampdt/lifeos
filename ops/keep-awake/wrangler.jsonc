@@ -1,0 +1,21 @@
+// Cloudflare Worker that keeps the API awake and so lets it run its own schedule
+// (docs/deployment.md, "Keeping the API awake"). Deploy: npx wrangler deploy
+{
+  "name": "lifeos-keep-awake",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-01",
+  // No public URL: the Worker only runs on its schedule.
+  "workers_dev": false,
+  "preview_urls": false,
+  "triggers": { "crons": ["*/10 * * * *"] },
+  "vars": {
+    // The web app, which proxies /api/* to the API, so a ping takes the same path as a visitor.
+    "APP_URL": "https://lifeos-five-tau.vercel.app",
+    "TIMEZONE": "Asia/Kolkata",
+    // No pings from 04:00 to 06:59 local time, so one instance stays inside Render's 750 free
+    // hours a month (21 hours a day is at most 651 a month). The first ping after it wakes the
+    // API before the 07:30 morning briefing.
+    "QUIET_HOURS": "04-07"
+  },
+  "observability": { "enabled": true }
+}

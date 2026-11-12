@@ -2,11 +2,14 @@
 
 Services (Notion client, database, LLM router, LangGraph checkpointer) are built once in the
 lifespan; each account's workflow dependencies and runner come from `contexts`. Tests pass
-ready-made `Services` to `create_app` instead.
+ready-made `Services` to `create_app` instead. The lifespan also builds the services of a demo
+mounted under /demo, and starts the in-process tick, when the settings ask for them.
 """
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
@@ -25,6 +28,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.ai_routes import router as ai_router
 from app.api.cron import router as cron_router
+from app.api.cron import tick_forever
 from app.api.errors import ApiError, error_body
 from app.api.knowledge_routes import router as knowledge_router
 from app.api.memory_routes import router as memory_router
@@ -55,6 +59,8 @@ from app.workflows.contexts import Contexts, UserContext
 from app.workflows.deps import WorkflowDeps, utcnow
 from app.workflows.runner import RunStateError, UnknownWorkflow
 from app.workspaces.store import AccountWorkspaces
+
+logger = logging.getLogger("lifeos.api")
 
 
 @dataclass
@@ -228,19 +234,37 @@ def notion_connections(
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings: Settings = app.state.settings
     async with AsyncExitStack() as stack:
-        app.state.services = await build_services(get_settings(), stack)
+        app.state.services = await build_services(settings, stack)
+        demo = app.state.demo
+        if demo is not None:  # a mounted app gets no lifespan of its own
+            try:
+                demo.state.services = await build_services(demo.state.settings, stack)
+            except Exception:  # the demo must never keep the real app from starting
+                logger.exception("the demo didn't start; /demo answers 503")
+        if (minutes := settings.lifeos_tick_minutes) > 0:
+            ticker = asyncio.create_task(tick_forever(app.state.services, minutes))
+            stack.callback(ticker.cancel)
         yield
 
 
-def create_app(services: Services | None = None) -> FastAPI:
-    settings = services.settings if services else get_settings()
+def create_app(services: Services | None = None, settings: Settings | None = None) -> FastAPI:
+    """With `services` (tests), the app uses them as given; otherwise its lifespan builds them
+    from `settings`, by default the environment's."""
+    settings = services.settings if services else settings or get_settings()
     # Production doesn't publish the OpenAPI schema or the interactive docs.
     hidden = {"docs_url": None, "redoc_url": None, "openapi_url": None}
     docs = hidden if settings.production else {}
     app = FastAPI(title="LifeOS", version="0.8.0", lifespan=None if services else _lifespan, **docs)
+    app.state.settings = settings
+    app.state.demo = None
     if services:
         app.state.services = services
+    elif settings.lifeos_demo_mount_database and not settings.lifeos_demo_mode:
+        # The public demo in this process, under /demo (LIFEOS_DEMO_MOUNT_DATABASE).
+        app.state.demo = create_app(settings=settings.mounted_demo())
+        app.mount("/demo", app.state.demo)
     app.include_router(router, prefix="/api/v1")
     app.include_router(cron_router, prefix="/api/v1")
     app.include_router(notion_connect_router, prefix="/api/v1")
