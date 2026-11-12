@@ -27,3 +27,6 @@ out/
 .DS_Store
 .vscode/
 .idea/
+
+# Wrangler state (ops/keep-awake)
+.wrangler/
