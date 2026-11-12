@@ -353,8 +353,10 @@ field values.
 - **Structured output only.** Every call asks for JSON matching a Pydantic schema, and the
   result is validated again in code. Free text never drives an action.
 - **Router.** Each tier has a pinned chain of models, tried in order on rate limits, timeouts,
-  server errors and invalid output. The fast tier parses and plans; the smart tier writes
-  reviews. A daily token budget stops calls, and the workflows fall back to rules.
+  server errors and invalid output. A model that hasn't answered after the tier's hedge time
+  (3 s fast, 10 s smart) gets the next one started alongside, and the first answer wins. The
+  fast tier parses and plans; the smart tier writes reviews. A daily token budget stops calls,
+  and the workflows fall back to rules.
 - **References instead of IDs.** Records appear in prompts as short codes (T1, B1). Every code
   the model returns is checked against the map, and codes left in prose are replaced by titles
   before anything is shown or written.

@@ -1,10 +1,17 @@
+import asyncio
 from datetime import UTC, datetime
 
 import pytest
 from pydantic import BaseModel
 
 from app.core.config import Settings
-from app.llm.base import LLMBadOutput, LLMBudgetExceeded, LLMNotConfigured, LLMUnavailable
+from app.llm.base import (
+    Completion,
+    LLMBadOutput,
+    LLMBudgetExceeded,
+    LLMNotConfigured,
+    LLMUnavailable,
+)
 from app.llm.mock import MockLLM
 from app.llm.router import LLMRouter
 
@@ -67,6 +74,66 @@ async def test_tier_selects_chain():
     mock.queue(Answer, {"value": 1})
     result = await make_router(mock).generate(Answer, system="s", prompt="p", tier="smart")
     assert result.usage.model == "c"
+
+
+class TimedProvider:
+    """Answers with the model's position in the chain after a delay per model, or fails."""
+
+    name = "timed"
+
+    def __init__(self, delays: dict[str, float], failing: tuple[str, ...] = ()):
+        self.delays = delays
+        self.failing = failing
+        self.started: list[str] = []
+        self.cancelled: list[str] = []
+
+    async def generate_structured(self, *, model, system, prompt, schema, **_):
+        self.started.append(model)
+        try:
+            await asyncio.sleep(self.delays[model])
+        except asyncio.CancelledError:
+            self.cancelled.append(model)
+            raise
+        if model in self.failing:
+            raise LLMUnavailable(f"{model}: 503")
+        return Completion(schema(value="abc".index(model)), input_tokens=10, output_tokens=5)
+
+
+def hedged(provider, hedge=0.05):
+    return LLMRouter(provider, {"fast": ["a", "b", "c"]}, hedge_seconds={"fast": hedge})
+
+
+async def test_a_slow_model_gets_the_next_one_alongside_and_the_first_answer_wins():
+    provider = TimedProvider({"a": 1.0, "b": 0.01, "c": 1.0})
+    result = await hedged(provider).generate(Answer, system="s", prompt="p")
+    assert result.value.value == 1 and result.usage.model == "b"
+    assert result.usage.fallbacks == 1  # "a" was outpaced
+    assert provider.started == ["a", "b"]
+    await asyncio.sleep(0)
+    assert provider.cancelled == ["a"]  # the slower call is dropped
+
+
+async def test_a_prompt_model_answers_alone():
+    provider = TimedProvider({"a": 0.01, "b": 0.01, "c": 0.01})
+    result = await hedged(provider).generate(Answer, system="s", prompt="p")
+    assert result.usage.model == "a" and provider.started == ["a"]
+
+
+async def test_the_first_model_can_still_win_after_the_hedge():
+    provider = TimedProvider({"a": 0.08, "b": 1.0, "c": 1.0})
+    result = await hedged(provider).generate(Answer, system="s", prompt="p")
+    assert result.usage.model == "a" and result.usage.fallbacks == 0
+    assert provider.started == ["a", "b"]
+
+
+async def test_a_failure_moves_on_at_once_and_all_failing_raises():
+    provider = TimedProvider({"a": 0.0, "b": 0.0, "c": 0.0}, failing=("a", "b"))
+    result = await hedged(provider, hedge=10).generate(Answer, system="s", prompt="p")
+    assert result.usage.model == "c" and result.usage.fallbacks == 2
+    provider = TimedProvider({"a": 0.0, "b": 0.08, "c": 0.0}, failing=("a", "b", "c"))
+    with pytest.raises(LLMUnavailable, match="all models failed"):
+        await hedged(provider).generate(Answer, system="s", prompt="p")
+    assert provider.started == ["a", "b", "c"]
 
 
 def test_settings_model_chains():

@@ -63,7 +63,7 @@ class LLMUsage:
     input_tokens: int
     output_tokens: int
     latency_ms: int
-    fallbacks: int  # how many models failed before this one answered
+    fallbacks: int  # how many models before this one in the chain failed or were outpaced
 
 
 @dataclass(frozen=True)

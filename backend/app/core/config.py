@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     llm_fast_models: str = "gemini-3.5-flash-lite,gemini-3.1-flash-lite"
     llm_smart_models: str = "gemini-3.5-flash,gemini-3.5-flash-lite"
     llm_timeout_seconds: float = 30.0
+    # A model that hasn't answered after this long gets the next model in its chain started
+    # alongside, and the first answer wins (0: one at a time). The same model has taken 1 s one
+    # week and 6 to 21 s the next (decision I59). "smart" waits longer: its answers are long.
+    llm_fast_hedge_seconds: float = 3.0
+    llm_smart_hedge_seconds: float = 10.0
     llm_daily_token_budget: int = 300_000  # the service key, all accounts together
     # The knowledge index's embeddings (architecture §5.9). Changing either means re-indexing.
     llm_embedding_model: str = "gemini-embedding-001"
@@ -159,6 +164,10 @@ class Settings(BaseSettings):
                 "lifeos_encryption_key": None,
             }
         )
+
+    @property
+    def hedge_seconds(self) -> dict[str, float]:
+        return {"fast": self.llm_fast_hedge_seconds, "smart": self.llm_smart_hedge_seconds}
 
     def model_chain(self, tier: str) -> list[str]:
         raw = self.llm_smart_models if tier == "smart" else self.llm_fast_models
