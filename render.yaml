@@ -41,6 +41,12 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      # The gateway that answers when Gemini is slow or refusing (decision I60). Its
+      # `tollgate:` chain entries are skipped until TOLLGATE_API_KEY is set in the dashboard.
+      - key: TOLLGATE_URL
+        value: https://tollgate.iampdt.workers.dev
+      - key: TOLLGATE_API_KEY
+        sync: false
       - key: NOTION_DS_TASKS
         sync: false
       - key: NOTION_DS_GOALS

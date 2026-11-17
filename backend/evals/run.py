@@ -27,7 +27,8 @@ from app.core.config import get_settings
 from app.db.models import KnowledgePage
 from app.domain.models import Book, Goal, Task
 from app.knowledge.index import Hit
-from app.llm.gemini import GeminiProvider
+from app.llm.base import LLMProvider
+from app.llm.factory import build_router
 from app.llm.router import LLMRouter
 from app.services.context import RefMap
 from app.services.scorecard import Habit, Metric, Scorecard
@@ -70,7 +71,7 @@ def _task(i: int, spec: str | dict[str, Any]) -> Task:
     )  # fmt: skip
 
 
-def _router(provider: GeminiProvider, model: str) -> LLMRouter:
+def _router(provider: LLMProvider, model: str) -> LLMRouter:
     return LLMRouter(provider, {"fast": [model], "smart": [model]}, daily_token_budget=10**9)
 
 
@@ -227,7 +228,8 @@ async def run_goals(provider, model, cases) -> tuple[list[CaseScore], list[dict]
 async def evaluate(models: list[str], suites: set[str]) -> Results:
     settings = get_settings()
     assert settings.gemini_api_key is not None
-    provider = GeminiProvider(settings.gemini_api_key.get_secret_value())
+    # Gemini, plus the gateway for `tollgate:` models when it is configured.
+    provider = build_router(settings).provider
     checkin_suite = yaml.safe_load((CASES / "checkin.yaml").read_text())
     checkin, scorecard = checkin_suite["cases"], load_scorecard(checkin_suite["scorecard"])
     planning = yaml.safe_load((CASES / "planning.yaml").read_text())

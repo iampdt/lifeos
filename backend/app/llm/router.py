@@ -33,6 +33,12 @@ from app.llm.base import (
 logger = logging.getLogger("lifeos.llm")
 
 
+def _provider_name(provider: LLMProvider, model: str) -> str:
+    """A routed provider (app/llm/gateway.py) names the provider that served this model."""
+    name_for = getattr(provider, "name_for", None)
+    return name_for(model) if name_for else provider.name
+
+
 class LLMRouter:
     def __init__(
         self,
@@ -53,6 +59,17 @@ class LLMRouter:
         self.daily_token_budget = daily_token_budget
         self.clock = clock
         self._spent: dict[date, int] = {}
+
+    def sibling(self, provider: LLMProvider | None, chains: dict[str, list[str]]) -> LLMRouter:
+        """Another provider and chains under this router's daily budget: both count their
+        tokens against the same total."""
+        other = LLMRouter(
+            provider, chains, timeout_seconds=self.timeout_seconds,
+            hedge_seconds=self.hedge_seconds, daily_token_budget=self.daily_token_budget,
+            clock=self.clock, embedding_model=self.embedding_model,
+        )  # fmt: skip
+        other._spent = self._spent
+        return other
 
     def tokens_spent_today(self) -> int:
         return self._spent.get(self.clock().date(), 0)
@@ -119,7 +136,7 @@ class LLMRouter:
                     return LLMResult(
                         value=completion.value,
                         usage=LLMUsage(
-                            provider=provider.name,
+                            provider=_provider_name(provider, chain[position]),
                             model=chain[position],
                             input_tokens=completion.input_tokens,
                             output_tokens=completion.output_tokens,

@@ -357,6 +357,13 @@ field values.
   (3 s fast, 10 s smart) gets the next one started alongside, and the first answer wins. The
   fast tier parses and plans; the smart tier writes reviews. A daily token budget stops calls,
   and the workflows fall back to rules.
+- **Gateway.** A chain entry such as `tollgate:smart` goes to [Tollgate](https://github.com/iampdt/tollgate),
+  an OpenAI-compatible gateway that fronts Groq and other free providers with its own
+  fallbacks. It sits second in both chains, so it answers when Gemini is slow or refusing. The
+  gateway only forwards chat messages, so the schema travels in the system prompt and the reply
+  is validated the same way. Its response cache is off for these calls. Only the owner's
+  workspace and the demo use it: other accounts stay on Gemini, the provider their AI terms
+  name, and embeddings always come from Gemini (decision I60).
 - **References instead of IDs.** Records appear in prompts as short codes (T1, B1). Every code
   the model returns is checked against the map, and codes left in prose are replaced by titles
   before anything is shown or written.

@@ -46,7 +46,7 @@ from app.db.models import User
 from app.db.session import make_engine, make_session_factory
 from app.demo.setup import demo_notion, demo_specs, demo_user, ensure_demo_database, reset_demo
 from app.llm.access import AccountLLM, AIAccessService
-from app.llm.factory import build_router, check_gemini_key, own_key_router
+from app.llm.factory import accounts_router, build_router, check_gemini_key, own_key_router
 from app.llm.router import LLMRouter
 from app.notion.client import NotionClient
 from app.notion.connections import NotionConnections, ReconnectNeeded
@@ -152,7 +152,7 @@ async def build_services(settings: Settings, stack: AsyncExitStack) -> Services:
         tz=ZoneInfo(settings.timezone),
     )
     connections = notion_connections(settings, session_factory)
-    ai = ai_access(settings, session_factory, llm)
+    ai = ai_access(settings, session_factory, accounts_router(settings, llm))
     accounts = None
     if connections is not None:
 

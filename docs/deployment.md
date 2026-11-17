@@ -210,6 +210,7 @@ The demo can still run as a service of its own (`LIFEOS_DEMO_MODE=true` and
 | Change the password | `create_owner EMAIL --reset` against the production `DATABASE_URL`; signs out every session (password sign-in only) |
 | Stop all writes | Set `LIFEOS_WRITES_ENABLED` to `"false"` in `render.yaml` and push (or, for an immediate stop, in the dashboard; the next Blueprint sync restores the file's value) |
 | Change models | `LLM_FAST_MODELS` / `LLM_SMART_MODELS` on Render; `LLM_FAST_HEDGE_SECONDS` / `LLM_SMART_HEDGE_SECONDS` set when the next model joins (0: never) |
+| Gateway fallback | `TOLLGATE_API_KEY` on Render (a key from Tollgate's `POST /api/admin/keys` with `cacheMode: "off"`); `TOLLGATE_URL` is in `render.yaml`. Without the key, `tollgate:` chain entries are skipped |
 
 ## Notes from the first deployment
 

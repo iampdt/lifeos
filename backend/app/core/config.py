@@ -14,6 +14,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = BACKEND_ROOT.parent
 ENV_FILE = REPO_ROOT / ".env"
+# Chain entries starting with this go to the Tollgate gateway (app/llm/gateway.py).
+GATEWAY_PREFIX = "tollgate:"
 
 
 class Settings(BaseSettings):
@@ -39,9 +41,15 @@ class Settings(BaseSettings):
 
     gemini_api_key: SecretStr | None = None
     # Pinned versions, tried in order. "fast" parses and plans; "smart" writes reviews.
-    # Chosen 2026-11-01 from measured calls (docs/build-log/phase-4b.md).
-    llm_fast_models: str = "gemini-3.5-flash-lite,gemini-3.1-flash-lite"
-    llm_smart_models: str = "gemini-3.5-flash,gemini-3.5-flash-lite"
+    # Chosen 2026-11-01 from measured calls (docs/build-log/phase-4b.md). `tollgate:<route>`
+    # entries go to the gateway and are skipped until TOLLGATE_URL and TOLLGATE_API_KEY are set
+    # (decision I60).
+    llm_fast_models: str = "gemini-3.5-flash-lite,tollgate:smart,gemini-3.1-flash-lite"
+    llm_smart_models: str = "gemini-3.5-flash,tollgate:smart,gemini-3.5-flash-lite"
+    # The gateway, used by the owner's workspace and the demo. Other accounts stay on Gemini
+    # only, the provider their AI terms name.
+    tollgate_url: str | None = None
+    tollgate_api_key: SecretStr | None = None
     llm_timeout_seconds: float = 30.0
     # A model that hasn't answered after this long gets the next model in its chain started
     # alongside, and the first answer wins (0: one at a time). The same model has taken 1 s one
@@ -169,9 +177,17 @@ class Settings(BaseSettings):
     def hedge_seconds(self) -> dict[str, float]:
         return {"fast": self.llm_fast_hedge_seconds, "smart": self.llm_smart_hedge_seconds}
 
-    def model_chain(self, tier: str) -> list[str]:
+    @property
+    def gateway(self) -> bool:
+        return bool(self.tollgate_url and self.tollgate_api_key)
+
+    def model_chain(self, tier: str, *, gateway: bool = True) -> list[str]:
+        """The tier's models in order; gateway entries only when the gateway is configured and
+        the caller allows it."""
         raw = self.llm_smart_models if tier == "smart" else self.llm_fast_models
-        return [name.strip() for name in raw.split(",") if name.strip()]
+        names = [name.strip() for name in raw.split(",") if name.strip()]
+        keep_gateway = gateway and self.gateway
+        return [n for n in names if keep_gateway or not n.startswith(GATEWAY_PREFIX)]
 
     @property
     def checkpoint_url(self) -> str:
