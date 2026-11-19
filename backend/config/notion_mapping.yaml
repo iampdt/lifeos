@@ -50,11 +50,12 @@ data_sources:
       title: {name: Date, type: title}
       woke_on_time: {name: Woke On Time, type: checkbox, description: Woke up on time}
       dsa: {name: DSA, type: checkbox, description: Did DSA / coding-interview practice}
-      deep_work: {name: Deep Work, type: checkbox, description: Did a deep-work block}
+      deep_work: {name: Deep Work, type: checkbox, description: "Did a deep-work block (25+ minutes, phone away)"}
       technical_learning: {name: Technical Learning, type: checkbox, description: Studied a technical topic}
-      workout: {name: Workout, type: checkbox, description: Worked out / exercised}
+      workout: {name: Workout, type: checkbox, description: "Worked out, or walked for 20+ minutes"}
       protein_target: {name: Protein Target, type: checkbox, description: Hit the protein target}
-      reading: {name: Reading, type: checkbox, description: Read a book}
+      reading: {name: Reading, type: checkbox, description: "Read a book (10+ pages)"}
+      gratitude: {name: Gratitude, type: checkbox, description: "Wrote a gratitude note (at least one thing)"}
       speech_practice: {name: Speech Practice, type: checkbox, description: Did speech practice}
       daily_highlight: {name: Daily Highlight, type: checkbox, description: "Completed the day's highlight"}
       sleep: {name: Sleep, type: number, unit: hours, description: Hours slept last night}
